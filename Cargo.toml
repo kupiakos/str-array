@@ -1,0 +1,22 @@
+[package]
+name = "str_array"
+authors = ["Alyssa Haroldsen <kupiakos@gmail.com>"]
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.63"
+description = "Fixed-size `str` type backed by an array"
+license = "Apache-2.0"
+repository = "https://github.com/kupiakos/open-enum"
+categories = ["no-std", "no-std::no-alloc", "data-structures", "rust-patterns"]
+keywords = ["str", "fixed", "Sized", "array"]
+
+[features]
+alloc = []
+std = ["alloc"]
+default = ["std"]
+
+[build-dependencies]
+autocfg = "1"
+
+[lints.rust]
+unexpected_cfgs = { level = "deny", check-cfg = ['cfg(has_core_error)', 'cfg(has_const_mut)'] }
