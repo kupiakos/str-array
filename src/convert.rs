@@ -90,10 +90,9 @@ impl<'a, const N: usize> From<&'a StrArray<N>> for &'a [u8] {
 
 impl<const N: usize> From<StrArray<N>> for [u8; N] {
     fn from(s: StrArray<N>) -> Self {
-        s.into_array()
+        s.into_bytes()
     }
 }
-
 
 impl<const N: usize> AsRef<str> for StrArray<N> {
     fn as_ref(&self) -> &str {

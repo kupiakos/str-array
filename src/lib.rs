@@ -1,19 +1,23 @@
-//! This crate provides a fixed-size string type, [`StrArray<N>`], which stores
-//! UTF-8 data in a byte array `[u8; N]`.
+//! Provides fixed-size string types [`StrArray<N>`] and [`CStrArray<N>`].
 //!
-//! It serves as the `str` equivalent of a `[u8; N]` array, offering a `Deref`
+//! [`StrArray`] serves as the `str` equivalent of `[u8; N]`, offering a `Deref`
 //! to `&str` and ensuring the UTF-8 invariant is always upheld, but with a
 //! size known at compile time. This is designed for `no_std` environments
 //! or where strings are always a certain size.
 //!
 //! The [`str_array!`] macro provides a compile-time-checked way to
-//! create [`StrArray`] instances from string literals and constants.
+//! build [`StrArray`] values from string literals and constants.
+//!
+//! Similarly, [`CStrArray`] and [`cstr_array!`] can construct a nul-terminated
+//! C string safely on the stack.
 //!
 //! # Features
 //!
-//! - `no_std` support by default.
-//! - Optional `alloc` and `std` features.
-//! - `const` support.
+//! - `no_std` support - disable default features to use
+//! - Optional `alloc` and `std` features
+//! - `const` support
+//! - [C string](CStrArray) support
+//! - Full test coverage
 //!
 //! # Examples
 //!
@@ -26,8 +30,9 @@
 //! assert_eq!(s1, "hello");
 //!
 //! // Or create from a &str with an panicking length check.
-//! let s2: StrArray<5> = StrArray::new("world");
-//! assert_eq!(core::mem::size_of_val(&s2), 5);
+//! let s2: StrArray<12> = StrArray::new(&format!("{s1}, world"));
+//! assert_eq!(core::mem::size_of_val(&s2), 12);
+//! assert_eq!(s2, "hello, world");
 //!
 //! // Or create from bytes with a UTF-8 check.
 //! let s3 = StrArray::from_utf8(
@@ -43,7 +48,6 @@
 //! ```
 #![no_std]
 #![deny(unsafe_op_in_unsafe_fn)]
-//!
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
@@ -64,11 +68,19 @@ use core::{
     str::{FromStr, Utf8Error},
 };
 
+#[cfg(all(has_core_error, not(feature = "std")))]
+use core::error::Error;
+
+#[cfg(all(not(has_core_error), feature = "std"))]
+use std::error::Error;
+
 mod cmp;
 mod convert;
-mod error;
+mod cstr;
+pub mod error;
 
-pub use error::StrLenError;
+pub use cstr::CStrArray;
+use error::StrLenError;
 
 /// Fixed-size [`str`] stored as a [`[u8; N]`][core::array].
 ///
@@ -380,14 +392,16 @@ impl<const N: usize> StrArray<N> {
         Self([0; N])
     }
 
-    /// Converts `&self` to a `&str`. This is performed on deref.
+    /// Borrows this `StrArray<N>` as a `&str`.
+    ///
+    /// This is performed automatically on deref.
     ///
     /// # Examples
     ///
     /// ```
     /// # use str_array::StrArray;
     /// let s = StrArray::<5>::new("hello");
-    /// assert_eq!(s, "hello");
+    /// assert_eq!(s.as_str().find('l'), Some(2));
     /// ```
     pub const fn as_str(&self) -> &str {
         // SAFETY: `self.0` is guaranteed to be UTF-8 bytes.
@@ -395,14 +409,17 @@ impl<const N: usize> StrArray<N> {
     }
 
     const_mut_fn! {
-        /// Converts `&mut self` to a `&mut str`. This is performed on deref.
+        /// Converts `&mut self` to a `&mut str`.
+        ///
+        /// This is performed automatically on deref.
         ///
         /// # Examples
         ///
         /// ```
         /// # use str_array::StrArray;
         /// let mut s = StrArray::<5>::new("hello");
-        /// assert_eq!(s.as_mut_str(), "hello");
+        /// s.as_mut_str().make_ascii_uppercase();
+        /// assert_eq!(s, "HELLO");
         /// ```
         pub fn as_mut_str(&mut self) -> &mut str {
             // SAFETY: `self.0` is guaranteed to be UTF-8 bytes.
@@ -410,7 +427,7 @@ impl<const N: usize> StrArray<N> {
         }
     }
 
-    /// Borrows self as a byte array of the same size.
+    /// Borrows `self` as a byte array of the same size.
     ///
     /// Unlike [`str::as_bytes`], this returns an array reference.
     ///
@@ -429,7 +446,7 @@ impl<const N: usize> StrArray<N> {
     }
 
     const_mut_fn! {
-        /// Borrows self as a mutable byte array of the same size.
+        /// Borrows `self` as a mutable byte array of the same size.
         ///
         /// Unlike [`str::as_bytes_mut`], this returns an array reference.
         ///
@@ -455,16 +472,20 @@ impl<const N: usize> StrArray<N> {
         }
     }
 
-    /// Converts `self` into its underlying array.
+    /// Converts a `StrArray<N>` into a byte array.
     ///
     /// # Examples
     ///
     /// ```
-    /// # use str_array::StrArray;
-    /// let s = StrArray::<5>::new("hello");
-    /// assert_eq!(s.into_array(), *b"hello");
+    /// # use str_array::{str_array, StrArray};
+    /// let x = str_array!("Fizzy");
+    ///
+    /// let [a, b @ .., c] = x.into_bytes();
+    /// assert_eq!(a, b'F');
+    /// assert_eq!(b, *b"izz");
+    /// assert_eq!(c, b'y');
     /// ```
-    pub const fn into_array(self) -> [u8; N] {
+    pub const fn into_bytes(self) -> [u8; N] {
         self.0
     }
 
@@ -534,7 +555,7 @@ impl<const N: usize> DerefMut for StrArray<N> {
 ///
 /// ```
 /// # use core::ptr::addr_of;
-/// # use str_array::str_array;
+/// # use str_array::{StrArray, str_array};
 /// str_array! {
 ///     static STATIC: StrArray<_> = "static";
 ///     static mut STATIC_MUT: StrArray<_> = "static_mut";
@@ -556,7 +577,7 @@ macro_rules! str_array {
         $name:ident: $strarray_ty:ty = $val:expr; $($rest:tt)*
     ) => {
         $(#[$attr])* $($item_kind)* $name: $crate::StrArray<{$val.len()}> = $crate::StrArray::new($val);
-        str_array!($($rest)*)
+        $crate::str_array!($($rest)*)
     };
     ($(#[$attr:meta])* static mut $($rest:tt)*) => {
         $crate::str_array!(@impl item ($([$attr])*) (static mut) $($rest)*);

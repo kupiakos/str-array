@@ -1,12 +1,12 @@
 [package]
 name = "str_array"
 authors = ["Alyssa Haroldsen <kupiakos@gmail.com>"]
-version = "1.0.0"
+version = "0.1.0"
 edition = "2021"
-rust-version = "1.63"
+rust-version = "1.64"
 description = "Fixed-size `str` type backed by an array"
 license = "Apache-2.0"
-repository = "https://github.com/kupiakos/open-enum"
+repository = "https://github.com/kupiakos/str-array"
 categories = ["no-std", "no-std::no-alloc", "data-structures", "rust-patterns"]
 keywords = ["str", "fixed", "Sized", "array"]
 
