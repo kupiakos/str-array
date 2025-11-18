@@ -1,0 +1,2 @@
+# Ensure README uses LF line endings to match cargo-rdme's default output
+README.md text eol=lf

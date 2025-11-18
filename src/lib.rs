@@ -1,4 +1,4 @@
-//! Provides fixed-size string types [`StrArray<N>`] and [`CStrArray<N>`].
+//! Provides fixed-size string types [`StrArray`] and [`CStrArray`].
 //!
 //! [`StrArray`] serves as the `str` equivalent of `[u8; N]`, offering a `Deref`
 //! to `&str` and ensuring the UTF-8 invariant is always upheld, but with a
@@ -8,26 +8,26 @@
 //! The [`str_array!`] macro provides a compile-time-checked way to
 //! build [`StrArray`] values from string literals and constants.
 //!
-//! Similarly, [`CStrArray`] and [`cstr_array!`] can construct a nul-terminated
-//! C string safely on the stack.
+//! Similarly, [`CStrArray`] and [`cstr_array!`] can construct a
+//! nul-terminated [`CStr`](core::ffi::CStr) safely on the stack.
 //!
 //! # Features
 //!
-//! - `no_std` support - disable default features to use
+//! - `no_std` support - disable default features to use without `std`
 //! - Optional `alloc` and `std` features
-//! - `const` support
-//! - [C string](CStrArray) support
-//! - Full test coverage
+//! - Full `const` support
+//! - [C string](crate::CStrArray) support
 //!
 //! # Examples
 //!
 //! ```
 //! use str_array::{str_array, StrArray};
 //!
-//! // Create from a literal using the macro. The length is inferred.
+//! // Create from a constant using the macro. The length is inferred.
 //! let s1 = str_array!("hello");
 //! assert_eq!(s1.len(), 5);
 //! assert_eq!(s1, "hello");
+//! assert!(matches!(s1.into_bytes(), [b'h', b'e', b'l', b'l', b'o']));
 //!
 //! // Or create from a runtime &str with an length check.
 //! let s2: StrArray<12> = StrArray::new(&format!("{s1}, world")).unwrap();
