@@ -1,21 +1,29 @@
 use super::*;
 
-/// Failed to construct `StrArray<N>` from a different-length `&str`.
+/// Failed to build `StrArray<N>` from a different-length `&str`.
+#[derive(Clone, Copy)]
 pub struct StrLenError<const N: usize> {
-    pub other_len: usize,
+    pub src_len: usize,
+}
+
+impl<const N: usize> StrLenError<N> {
+    /// Panic in `const` with this error.
+    pub const fn const_panic(self) -> ! {
+        panic!("Failed to build StrArray<N> from string with len != N")
+    }
 }
 
 impl<const N: usize> Debug for StrLenError<N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "StrLenError<{N}> {{ other_len: {} }}", self.other_len)
+        write!(f, "StrLenError<{N}> {{ src_len: {} }}", self.src_len)
     }
 }
 impl<const N: usize> Display for StrLenError<N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Failed to construct `StrArray<{N}>` from `&str` with len {}",
-            self.other_len
+            "Failed to build `StrArray<{N}>` from string with len {}",
+            self.src_len
         )
     }
 }
@@ -23,22 +31,30 @@ impl<const N: usize> Display for StrLenError<N> {
 #[cfg(any(has_core_error, feature = "std"))]
 impl<const N: usize> Error for StrLenError<N> {}
 
-/// Failed to construct `CStrArray<N>` from a different-length `&CStr`.
+/// Failed to build `CStrArray<N>` from a different-length `&CStr`.
+#[derive(Clone, Copy)]
 pub struct CStrLenError<const N: usize> {
-    pub other_len: usize,
+    pub src_len: usize,
+}
+
+impl<const N: usize> CStrLenError<N> {
+    /// Panic in `const` with this error.
+    pub const fn const_panic(self) -> ! {
+        panic!("Failed to build CStrArray<N> from string with len != N")
+    }
 }
 
 impl<const N: usize> Debug for CStrLenError<N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "CStrLenError<{N}> {{ other_len: {} }}", self.other_len)
+        write!(f, "CStrLenError<{N}> {{ src_len: {} }}", self.src_len)
     }
 }
 impl<const N: usize> Display for CStrLenError<N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Failed to construct `CStrArray<{N}>` from `&CStr` with len {}",
-            self.other_len
+            "Failed to build `CStrArray<{N}>` from string with len {}",
+            self.src_len
         )
     }
 }
@@ -47,10 +63,17 @@ impl<const N: usize> Display for CStrLenError<N> {
 impl<const N: usize> Error for CStrLenError<N> {}
 
 /// Data provided contains an interior nul byte at byte `position`.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct InteriorNulError {
     /// The position of the interior nul byte.
     pub position: usize,
+}
+
+impl InteriorNulError {
+    /// Panic in `const` with this error.
+    pub const fn const_panic(self) -> ! {
+        panic!("Failed to build CStrArray with interior nul")
+    }
 }
 
 impl Display for InteriorNulError {
@@ -69,31 +92,31 @@ mod tests {
 
     #[test]
     fn test_str_len_error_debug() {
-        let err = StrLenError::<10> { other_len: 5 };
-        assert_eq!(format!("{err:?}"), "StrLenError<10> { other_len: 5 }");
+        let err = StrLenError::<10> { src_len: 5 };
+        assert_eq!(format!("{err:?}"), "StrLenError<10> { src_len: 5 }");
     }
 
     #[test]
     fn test_str_len_error_display() {
-        let err = StrLenError::<10> { other_len: 5 };
+        let err = StrLenError::<10> { src_len: 5 };
         assert_eq!(
             format!("{err}"),
-            "Failed to construct `StrArray<10>` from `&str` with len 5"
+            "Failed to build `StrArray<10>` from string with len 5"
         );
     }
 
     #[test]
     fn test_c_str_len_debug() {
-        let err = CStrLenError::<10> { other_len: 5 };
-        assert_eq!(format!("{err:?}"), "CStrLenError<10> { other_len: 5 }");
+        let err = CStrLenError::<10> { src_len: 5 };
+        assert_eq!(format!("{err:?}"), "CStrLenError<10> { src_len: 5 }");
     }
 
     #[test]
     fn test_c_str_len_display() {
-        let err = CStrLenError::<10> { other_len: 5 };
+        let err = CStrLenError::<10> { src_len: 5 };
         assert_eq!(
             format!("{err}"),
-            "Failed to construct `CStrArray<10>` from `&CStr` with len 5"
+            "Failed to build `CStrArray<10>` from string with len 5"
         );
     }
 

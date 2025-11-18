@@ -29,8 +29,8 @@
 //! assert_eq!(s1.len(), 5);
 //! assert_eq!(s1, "hello");
 //!
-//! // Or create from a &str with an panicking length check.
-//! let s2: StrArray<12> = StrArray::new(&format!("{s1}, world"));
+//! // Or create from a runtime &str with an length check.
+//! let s2: StrArray<12> = StrArray::new(&format!("{s1}, world")).unwrap();
 //! assert_eq!(core::mem::size_of_val(&s2), 12);
 //! assert_eq!(s2, "hello, world");
 //!
@@ -42,7 +42,7 @@
 //!
 //! // Or define an item with an inferred length.
 //! str_array! {
-//!     static S4: StrArray<_> = "Georgia";
+//!     static S4 = "Georgia";
 //! }
 //! assert_eq!(S4.len(), 7);
 //! ```
@@ -82,6 +82,12 @@ pub mod error;
 pub use cstr::CStrArray;
 use error::StrLenError;
 
+/// Internal-only items which may change with a non-breaking release.
+#[doc(hidden)]
+pub mod __internal {
+    pub use crate::cstr::{build_cstr, CStrArrayBytes};
+}
+
 /// Fixed-size [`str`] stored as a [`[u8; N]`][core::array].
 ///
 /// `[u8; N]` is to `[u8]` as `StrArray<N>` is to `str`.
@@ -101,7 +107,7 @@ use error::StrLenError;
 /// let mut airports = [
 ///     "JFK", "LAX", "LHR", "CDG", "HND",
 ///     "PEK", "DXB", "AMS", "FRA", "SIN",
-/// ].map(AirportCode::new);
+/// ].map(|code| AirportCode::new(code).unwrap());
 ///
 /// // All of the strings are contiguous in memory.
 /// assert_eq!(core::mem::size_of_val(&airports), 30);
@@ -116,8 +122,8 @@ use error::StrLenError;
 /// # use core::mem::size_of_val;
 /// # use str_array::{StrArray, str_array};
 /// str_array! {
-///     static FOO: StrArray<_> = include_str!("foo.txt");
-///     static mut FOO_MUT: StrArray<_> = "utf-8 buffer";
+///     static FOO = include_str!("foo.txt");
+///     static mut FOO_MUT = "utf-8 buffer";
 /// }
 /// assert_eq!(&FOO, "Hello, world!");
 /// assert_eq!(size_of_val(&FOO), 13);
@@ -133,12 +139,6 @@ pub struct StrArray<const N: usize>(
     /// Must be UTF-8 encoded bytes.
     [u8; N],
 );
-
-impl<const N: usize> Default for StrArray<N> {
-    fn default() -> Self {
-        Self::zeroed()
-    }
-}
 
 impl<const N: usize> Debug for StrArray<N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -189,7 +189,9 @@ macro_rules! const_mut_fn {
 }
 
 impl<const N: usize> StrArray<N> {
-    /// Builds a `StrArray<N>` from a correct-length `val`.
+    /// Builds a `StrArray<N>` from `val` by performing a length check.
+    ///
+    /// This returns an `Err` if `val.len() != N`.
     ///
     /// If `val` is a literal or `const`, consider using [`str_array!`]
     /// instead, which always builds a `StrArray` with the correct `N`.
@@ -198,53 +200,18 @@ impl<const N: usize> StrArray<N> {
     ///
     /// ```
     /// # use str_array::StrArray;
-    /// let s: StrArray<5> = StrArray::new("hello");
+    /// let s = StrArray::<5>::new("hello").unwrap();
     /// assert_eq!(s, "hello");
+    /// assert!(StrArray::<5>::new("foo").is_err());
     /// ```
-    ///
-    /// The size of the `StrArray` must exactly match the input size:
-    ///
-    /// ```should_panic
-    /// # use str_array::StrArray;
-    /// _ = StrArray::<3>::new("hello");
-    /// ```
-    ///
-    /// # Panics
-    ///
-    /// Panics if `val.len() != N`.
-    #[track_caller]
-    pub const fn new(val: &str) -> Self {
-        if val.len() == N {
-            // SAFETY: `val.len() == N` as required.
-            unsafe { Self::new_unchecked(val) }
-        } else {
-            panic!("val.len() != N")
+    pub const fn new(val: &str) -> Result<Self, StrLenError<N>> {
+        match Self::ref_from_str(val) {
+            Ok(out) => Ok(*out),
+            Err(e) => Err(e),
         }
     }
 
-    /// Fallibly builds a `StrArray<N>` from `val`.
-    ///
-    /// This returns an `Err` if `val.len() != N`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use str_array::StrArray;
-    /// let s = StrArray::<5>::new_checked("hello").unwrap();
-    /// assert_eq!(s, "hello");
-    /// assert!(StrArray::<5>::new_checked("foo").is_err());
-    /// ```
-    pub const fn new_checked(val: &str) -> Result<Self, StrLenError<N>> {
-        if val.len() == N {
-            Ok(Self::new(val))
-        } else {
-            Err(StrLenError {
-                other_len: val.len(),
-            })
-        }
-    }
-
-    /// Builds a `StrArray<N>` from `val` without a size check.
+    /// Builds a `StrArray<N>` from `val` without a length check.
     ///
     /// # Examples
     ///
@@ -278,9 +245,7 @@ impl<const N: usize> StrArray<N> {
     /// ```
     pub const fn ref_from_str(val: &str) -> Result<&Self, StrLenError<N>> {
         if val.len() != N {
-            return Err(StrLenError {
-                other_len: val.len(),
-            });
+            return Err(StrLenError { src_len: val.len() });
         }
         // SAFETY:
         // - `StrArray<N>` is `repr(transparent)` over `[u8; N]`, as is `str`.
@@ -309,7 +274,7 @@ impl<const N: usize> StrArray<N> {
         pub fn mut_from_str(val: &mut str) -> Result<&mut Self, StrLenError<N>> {
             if val.len() != N {
                 return Err(StrLenError {
-                    other_len: val.len(),
+                    src_len: val.len(),
                 });
             }
             // SAFETY:
@@ -379,14 +344,12 @@ impl<const N: usize> StrArray<N> {
 
     /// Returns a `StrArray<N>` filled with zeroes.
     ///
-    /// This is also what [`Default::default`] returns for `Self`.
-    ///
     /// # Examples
     ///
     /// ```
     /// # use str_array::StrArray;
-    /// let s = StrArray::<0>::zeroed();
-    /// assert_eq!(s, "");
+    /// let s = StrArray::<4>::zeroed();
+    /// assert_eq!(s, "\0\0\0\0");
     /// ```
     pub const fn zeroed() -> Self {
         Self([0; N])
@@ -399,9 +362,10 @@ impl<const N: usize> StrArray<N> {
     /// # Examples
     ///
     /// ```
-    /// # use str_array::StrArray;
-    /// let s = StrArray::<5>::new("hello");
+    /// # use str_array::str_array;
+    /// let s = str_array!("hello");
     /// assert_eq!(s.as_str().find('l'), Some(2));
+    /// assert_eq!(s.find('y'), None);  // using deref
     /// ```
     pub const fn as_str(&self) -> &str {
         // SAFETY: `self.0` is guaranteed to be UTF-8 bytes.
@@ -416,8 +380,8 @@ impl<const N: usize> StrArray<N> {
         /// # Examples
         ///
         /// ```
-        /// # use str_array::StrArray;
-        /// let mut s = StrArray::<5>::new("hello");
+        /// # use str_array::str_array;
+        /// let mut s = str_array!("hello");
         /// s.as_mut_str().make_ascii_uppercase();
         /// assert_eq!(s, "HELLO");
         /// ```
@@ -454,14 +418,15 @@ impl<const N: usize> StrArray<N> {
         /// # Examples
         ///
         /// ```
-        /// # use str_array::StrArray;
-        /// let mut s = StrArray::<5>::new("hello");
+        /// # use str_array::str_array;
+        /// let mut s = str_array!("hello");
         /// unsafe {
         ///    let bytes = s.as_mut_bytes();
         ///    bytes[0] = b'H';
         /// }
         /// assert_eq!(s, "Hello");
         /// ```
+        ///
         /// # Safety
         /// This has the same non-local requirement as [`str::as_bytes_mut`]:
         ///
@@ -494,8 +459,8 @@ impl<const N: usize> StrArray<N> {
     /// # Examples
     ///
     /// ```
-    /// # use str_array::StrArray;
-    /// let s = StrArray::<5>::new("hello");
+    /// # use str_array::str_array;
+    /// let s = str_array!("hello");
     /// assert_eq!(s.len(), 5);
     /// ```
     pub const fn len(&self) -> usize {
@@ -548,8 +513,8 @@ impl<const N: usize> DerefMut for StrArray<N> {
 /// assert_eq!(y, "Sally");
 /// ```
 ///
-/// Define `static` or `const` items, using `_` for the string length.
-/// The length of the array uses the length of the assigned string.
+/// Define `static` or `const` items by eliding the type.
+/// The length of the `StrArray` uses the length of the assigned string.
 /// Note that the assignment expression currently is evaluated twice,
 /// but this should have no effect due to it being in `const`.
 ///
@@ -557,9 +522,9 @@ impl<const N: usize> DerefMut for StrArray<N> {
 /// # use core::ptr::addr_of;
 /// # use str_array::{StrArray, str_array};
 /// str_array! {
-///     static STATIC: StrArray<_> = "static";
-///     static mut STATIC_MUT: StrArray<_> = "static_mut";
-///     const CONST: StrArray<_> = "constant";
+///     static STATIC = "static";
+///     static mut STATIC_MUT = "static_mut";
+///     const CONST = "constant";
 /// }
 /// assert_eq!(STATIC, "static");
 /// assert_eq!(unsafe { &*addr_of!(STATIC_MUT) }, "static_mut");
@@ -567,16 +532,17 @@ impl<const N: usize> DerefMut for StrArray<N> {
 /// ```
 #[macro_export]
 macro_rules! str_array {
-    // TODO: find a way to avoid the double-evaluation of `$val` for item declarations without adding a dependency.
-    // TODO: support an explicit size instead of an underscore always
-    // TODO: find a way to validate the type is what was mentioned and still allow the `_`.
-    // ^ I'll probably need a proc macro for these
+    // Is there a way to avoid the double-evaluation of `$val` for item declarations
+    // without adding a dependency or proc-macro (`paste`)?
     (@impl item
         ($([$attr:meta])*)
         ($($item_kind:tt)*)
-        $name:ident: $strarray_ty:ty = $val:expr; $($rest:tt)*
+        $name:ident = $val:expr; $($rest:tt)*
     ) => {
-        $(#[$attr])* $($item_kind)* $name: $crate::StrArray<{$val.len()}> = $crate::StrArray::new($val);
+        $(#[$attr])* $($item_kind)* $name: $crate::StrArray<{$val.len()}> = match $crate::StrArray::new($val) {
+            Ok(a) => a,
+            Err(e) => e.const_panic(),
+        };
         $crate::str_array!($($rest)*)
     };
     ($(#[$attr:meta])* static mut $($rest:tt)*) => {
@@ -590,7 +556,10 @@ macro_rules! str_array {
     };
     ($val:expr) => {{
         const VAL: &str = $val;
-        const ARRAY: $crate::StrArray<{ VAL.len() }> = $crate::StrArray::new(VAL);
+        const ARRAY: $crate::StrArray<{ VAL.len() }> = match $crate::StrArray::new(VAL) {
+            Ok(a) => a,
+            Err(e) => e.const_panic(),
+        };
         ARRAY
     }};
     () => {};
@@ -633,23 +602,16 @@ mod tests {
         assert_eq!(X, "FOO");
     }
 
-    // TODO: test using type alias for strarray and explicit len
-
     #[test]
     #[deny(non_upper_case_globals)]
     fn test_macro_declared_items() {
-        // TODO: test attributes
         str_array! {
             /// With multi-line doc string
-            ///
-            /// and path from crate root.
-            static STATIC: crate::StrArray<_> = "hello";
+            static STATIC = "hello";
 
             #[allow(non_upper_case_globals)]
-            static mut StaticMut: StrArray<_> = "aoeu";
-
-            // With
-            const CONST: StrArray<_> = "constant";
+            static mut StaticMut = "aoeu";
+            const CONST = "constant";
         }
         assert_eq!(STATIC, "hello");
         assert_type_eq_all::<StrArray<5>, _>(STATIC);

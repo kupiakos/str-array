@@ -4,7 +4,7 @@ impl<const N: usize> FromStr for StrArray<N> {
     type Err = StrLenError<N>;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::new_checked(s)
+        Self::new(s)
     }
 }
 
@@ -12,7 +12,7 @@ impl<const N: usize> TryFrom<&str> for StrArray<N> {
     type Error = StrLenError<N>;
 
     fn try_from(val: &str) -> Result<Self, Self::Error> {
-        Self::new_checked(val)
+        Self::new(val)
     }
 }
 

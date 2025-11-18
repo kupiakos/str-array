@@ -1,10 +1,11 @@
-use core::ffi::CStr;
 use core::slice;
+use core::{ffi::CStr, num::NonZeroU8};
 
 use super::*;
 use crate::error::{CStrLenError, InteriorNulError};
 use NulByte::Nul;
 
+/// A byte that must always be 0.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 #[repr(u8)]
 enum NulByte {
@@ -32,34 +33,22 @@ const fn count_bytes(val: &CStr) -> usize {
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 #[repr(C)]
 pub struct CStrArray<const N: usize> {
-    // Always kept non-zero.
-    data: [u8; N],
+    data: [NonZeroU8; N],
     nul: NulByte,
 }
 
 impl<const N: usize> CStrArray<N> {
-    /// Builds a `CStrArray<N>` from a correct-length `val`.
-    ///
-    /// This performs a length validation.
-    ///
-    /// If `val` is a literal or `const`, consider using [`cstr_array!`]
-    /// instead, which always builds a `CStrArray` with the correct `N`.
-    pub const fn new(val: &CStr) -> Self {
-        let other_len = count_bytes(val);
-        if other_len != N {
-            panic!("val.count_bytes() != N");
-        }
-        // SAFETY: `val` is checked to point to `N` non-nul bytes followed by a nul.
-        unsafe { Self::new_unchecked(val) }
-    }
-
-    /// Fallibly builds a `StrArray<N>` from `val`.
+    /// Builds a `StrArray<N>` from `val`.
     ///
     /// This returns an `Err` if `val.len() != N`.
-    pub const fn new_checked(val: &CStr) -> Result<Self, CStrLenError<N>> {
+    ///
+    /// If `val` is a literal or `const`, consider using [`cstr_array!`]
+    /// instead, which always builds a `CStrArray` with the correct `N`
+    /// by checking the length at compile time.
+    pub const fn new(val: &CStr) -> Result<Self, CStrLenError<N>> {
         let other_len = count_bytes(val);
         if other_len != N {
-            return Err(CStrLenError { other_len });
+            return Err(CStrLenError { src_len: other_len });
         }
         // SAFETY: `val` is checked to point to `N` non-nul bytes followed by a nul.
         Ok(unsafe { Self::new_unchecked(val) })
@@ -80,21 +69,22 @@ impl<const N: usize> CStrArray<N> {
 
     /// Constructs a `CStrArray<N>` from an array with its byte contents.
     ///
-    /// Note that this does _not_ include the nul terminator -
-    /// it is appended automatically.
+    /// Note that `bytes` should _not_ include the nul terminator -
+    /// it is appended automatically by this method.
+    ///
+    /// If `val` is a literal or `const`, consider using [`cstr_array!`]
+    /// instead, which checks for the presence of a nul at compile time.
     pub const fn from_bytes_without_nul(bytes: &[u8; N]) -> Result<Self, InteriorNulError> {
         // Avoid bumping the MSRV and stay `const` by using a manual loop.
         let mut i = 0;
-        while i + 1 < N {
+        while i < N {
             if bytes[i] == 0 {
                 return Err(InteriorNulError { position: i });
             }
             i += 1;
         }
-        Ok(Self {
-            data: *bytes,
-            nul: Nul,
-        })
+        // SAFETY: `bytes` has been checked to contain no interior nul bytes
+        unsafe { Self::from_bytes_without_nul_unchecked(bytes) }
     }
 
     /// Constructs a `CStrArray<N>` from an array with its byte contents and no checks.
@@ -107,8 +97,10 @@ impl<const N: usize> CStrArray<N> {
     pub const unsafe fn from_bytes_without_nul_unchecked(
         bytes: &[u8; N],
     ) -> Result<Self, InteriorNulError> {
+        // SAFETY: `bytes` does not contain any 0 values as promised by the caller.
+        let nonzero: &[NonZeroU8; N] = unsafe { &*bytes.as_ptr().cast() };
         Ok(Self {
-            data: *bytes,
+            data: *nonzero,
             nul: Nul,
         })
     }
@@ -133,7 +125,8 @@ impl<const N: usize> CStrArray<N> {
     /// The returned slice will not contain the trailing nul terminator
     /// that this C string has.
     pub const fn as_bytes(&self) -> &[u8; N] {
-        &self.data
+        // SAFETY: `[NonZeroU8; N]` has the same layout as `[u8; N]` and cannot be mutated through a reference.
+        unsafe { &*self.data.as_ptr().cast() }
     }
 
     /// Converts this C string to a byte slice containing the trailing 0 byte.
@@ -149,7 +142,7 @@ impl<const N: usize> CStrArray<N> {
 
     /// Consumes `self` into its underlying array.
     pub const fn into_bytes(self) -> [u8; N] {
-        self.data
+        *self.as_bytes()
     }
 
     /// Returns the fixed length.
@@ -180,8 +173,17 @@ impl<const N: usize> CStrArray<N> {
     }
 }
 
-impl Default for CStrArray<0> {
-    fn default() -> Self {
+impl CStrArray<0> {
+    /// Returns an empty `CStrArray`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use str_array::CStrArray;
+    /// let s = CStrArray::empty();
+    /// assert!(s.is_empty());
+    /// ```
+    pub const fn empty() -> Self {
         Self { data: [], nul: Nul }
     }
 }
@@ -210,7 +212,7 @@ impl<const N: usize> TryFrom<&CStr> for CStrArray<N> {
     type Error = CStrLenError<N>;
 
     fn try_from(val: &CStr) -> Result<Self, Self::Error> {
-        Self::new_checked(val)
+        Self::new(val)
     }
 }
 
@@ -223,7 +225,7 @@ mod alloc {
         type Error = CStrLenError<N>;
 
         fn try_from(val: Box<CStr>) -> Result<Self, Self::Error> {
-            Self::new_checked(&val)
+            Self::new(&val)
         }
     }
 
@@ -231,7 +233,7 @@ mod alloc {
         type Error = CStrLenError<N>;
 
         fn try_from(val: Rc<CStr>) -> Result<Self, Self::Error> {
-            Self::new_checked(&val)
+            Self::new(&val)
         }
     }
 
@@ -239,7 +241,7 @@ mod alloc {
         type Error = CStrLenError<N>;
 
         fn try_from(val: Arc<CStr>) -> Result<Self, Self::Error> {
-            Self::new_checked(&val)
+            Self::new(&val)
         }
     }
 
@@ -247,7 +249,7 @@ mod alloc {
         type Error = CStrLenError<N>;
 
         fn try_from(val: CString) -> Result<Self, Self::Error> {
-            Self::new_checked(&val)
+            Self::new(&val)
         }
     }
 
@@ -288,7 +290,66 @@ impl<const N: usize> PartialEq<CStrArray<N>> for &CStr {
     }
 }
 
-/// Builds [`CStrArray`] from constant `&CStr`.
+/// Internal utility struct used by `cstr_array!`.
+pub struct CStrArrayBytes<T>(pub T);
+
+/// Builds a `CStrArray<N>` from `bytes` without nul, panicking on failure.
+pub const fn build_cstr<const N: usize>(bytes: &[u8]) -> CStrArray<N> {
+    let as_array: &[u8; N] = if bytes.len() == N {
+        // SAFETY: `self.0.len() == N`
+        unsafe { &*bytes.as_ptr().cast() }
+    } else {
+        CStrLenError::<N> {
+            src_len: bytes.len(),
+        }
+        .const_panic()
+    };
+    match CStrArray::from_bytes_without_nul(as_array) {
+        Ok(x) => x,
+        Err(e) => e.const_panic(),
+    }
+}
+
+impl<'a, const N: usize> CStrArrayBytes<&'a [u8; N]> {
+    /// Unsizes the byte array
+    pub const fn get(self) -> &'a [u8] {
+        self.0
+    }
+}
+
+impl<'a> CStrArrayBytes<&'a [u8]> {
+    /// Copies the slice
+    pub const fn get(self) -> &'a [u8] {
+        self.0
+    }
+}
+
+impl<'a> CStrArrayBytes<&'a str> {
+    /// Gets the bytes of the `str`
+    pub const fn get(self) -> &'a [u8] {
+        self.0.as_bytes()
+    }
+}
+
+impl<'a> CStrArrayBytes<&'a CStr> {
+    /// Gets the bytes of the `CStr`, counting up to the nul terminator
+    pub const fn get(self) -> &'a [u8] {
+        // Using `CStr::to_bytes` bumps the MSRV higher than desired.
+        // SAFETY: `count_bytes` returns the number of bytes that are present before the nul character.
+        unsafe { slice::from_raw_parts(self.0.as_ptr().cast(), count_bytes(self.0)) }
+    }
+}
+
+/// Builds [`CStrArray`] from constant strings of various types.
+///
+/// This macro can construct a `CStrArray<N>` from a constant expression of any of these input types:
+///
+/// - `&CStr`
+/// - `&str`
+/// - `&[u8]`
+/// - `&[u8; N]`
+///
+/// This performs the necessary nul presence checks at compile time.
 ///
 /// # Examples
 ///
@@ -305,33 +366,70 @@ impl<const N: usize> PartialEq<CStrArray<N>> for &CStr {
 /// assert_eq!(y, c"Sally");
 /// ```
 ///
-/// Define `static` or `const` items, using `_` for the string length.
-/// The length of the array uses the length of the assigned string.
+/// Pass a `const` expression of `&str` or `&[u8]` to build a `CStrArray` with the same length.
+/// A nul terminator is appended automatically.
+///
+/// ```
+/// # use core::ffi::CStr;
+/// # use str_array::cstr_array;
+/// assert_eq!(cstr_array!("Buzz"), cstr_array!(b"Buzz"));
+/// ```
+///
+/// It's a compile-time failure to invoke `cstr_array!` with a nul inside the string.
+///
+/// ```compile_fail
+/// # use core::ffi::CStr;
+/// # use str_array::cstr_array;
+/// _ = cstr_array!("nul is appended by the macro; don't include it\0");
+/// ```
+///
+/// ```compile_fail
+/// # use core::ffi::CStr;
+/// # use str_array::cstr_array;
+/// _ = cstr_array!(b"nul\0in the middle");
+/// ```
+///
+/// Define `static` or `const` items by eliding the type.
+///
+/// The length of the `CStrArray` uses the length of the assigned string.
 /// Note that the assignment expression currently is evaluated twice,
 /// but this should have no effect due to it being in `const`.
 ///
 /// ```
 /// # use core::ptr::addr_of;
 /// # use str_array::{cstr_array, CStrArray};
+/// const BYTE_ARRAY: [u8; 12] = *b"direct array";
+///
 /// cstr_array! {
-///     static STATIC: CStrArray<_> = c"static";
-///     static mut STATIC_MUT: CStrArray<_> = c"static_mut";
-///     const CONST: CStrArray<_> = c"constant";
+///     static STATIC = c"static";
+///     static mut STATIC_MUT = c"static_mut";
+///     const CONST = c"constant";
+///
+///     static FROM_STR = concat!("checked", " for ", "nul");
+///     static FROM_BYTES_REF = b"also checked for nul";
+///     static FROM_BYTES_ARRAY = &BYTE_ARRAY;  // doesn't construct directly from array
 /// }
+///
 /// assert_eq!(STATIC, c"static");
 /// assert_eq!(unsafe { &*addr_of!(STATIC_MUT) }, c"static_mut");
 /// assert_eq!(CONST, c"constant");
+///
+/// assert_eq!(FROM_STR, c"checked for nul");
+/// assert_eq!(FROM_BYTES_REF, c"also checked for nul");
+/// assert_eq!(FROM_BYTES_ARRAY, *c"direct array");
 /// ```
 // TODO: Support plain string literals too (requires a nul check).
+// TODO: maybe just write `static STATIC = c"static"`
 #[macro_export]
 macro_rules! cstr_array {
     // TODO: same caveats as str_array
     (@impl item
         ($([$attr:meta])*)
         ($($item_kind:tt)*)
-        $name:ident: $strarray_ty:ty = $val:expr; $($rest:tt)*
+        $name:ident = $val:expr; $($rest:tt)*
     ) => {
-        $(#[$attr])* $($item_kind)* $name: $crate::CStrArray<{$val.count_bytes()}> = $crate::CStrArray::new($val);
+        $(#[$attr])* $($item_kind)* $name: $crate::CStrArray<{ $crate::__internal::CStrArrayBytes($val).get().len() }> =
+            $crate::__internal::build_cstr($crate::__internal::CStrArrayBytes($val).get());
         $crate::cstr_array!($($rest)*)
     };
     ($(#[$attr:meta])* static mut $($rest:tt)*) => {
@@ -344,8 +442,8 @@ macro_rules! cstr_array {
         $crate::cstr_array!(@impl item ($([$attr])*) (const) $($rest)*);
     };
     ($val:expr) => {{
-        const VAL: &::core::ffi::CStr = $val;
-        const ARRAY: $crate::CStrArray<{ VAL.count_bytes() }> = $crate::CStrArray::new(VAL);
+        const VAL: &[u8] = $crate::__internal::CStrArrayBytes($val).get();
+        const ARRAY: $crate::CStrArray<{ VAL.len() }> = $crate::__internal::build_cstr(VAL);
         ARRAY
     }};
     () => {};

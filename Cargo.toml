@@ -1,7 +1,7 @@
 [package]
 name = "str_array"
 authors = ["Alyssa Haroldsen <kupiakos@gmail.com>"]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.64"
 description = "Fixed-size `str` type backed by an array"
@@ -19,4 +19,7 @@ default = ["std"]
 autocfg = "1"
 
 [lints.rust]
-unexpected_cfgs = { level = "deny", check-cfg = ['cfg(has_core_error)', 'cfg(has_const_mut)'] }
+unexpected_cfgs = { level = "deny", check-cfg = [
+    'cfg(has_core_error)',
+    'cfg(has_const_mut)',
+] }
