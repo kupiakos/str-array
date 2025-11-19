@@ -64,7 +64,7 @@ impl<const N: usize> CStrArray<N> {
     ///
     /// # Safety
     ///
-    /// `val.count_bytes() == N`
+    /// `val.count_bytes() == N` or else behavior is undefined.
     pub const unsafe fn new_unchecked(val: &CStr) -> Self {
         // SAFETY: `val` is known to point to `N` non-nul bytes followed by a nul.
         CStrArray {
@@ -101,7 +101,8 @@ impl<const N: usize> CStrArray<N> {
     /// it is appended automatically.
     ///
     /// # Safety
-    /// - `bytes` must not have any 0 (nul) bytes.
+    ///
+    /// `bytes` must not have any 0 (nul) bytes.
     pub const unsafe fn from_bytes_without_nul_unchecked(
         bytes: &[u8; N],
     ) -> Self {
@@ -121,7 +122,7 @@ impl<const N: usize> CStrArray<N> {
 
     /// Borrows this `CStrArray` as a `&CStr`.
     ///
-    /// This is called by `Deref`.
+    /// This is called by `Deref` automatically.
     pub const fn as_c_str(&self) -> &CStr {
         // SAFETY:
         // - The first `N` bytes of `self` (`data` field) are kept non-nul.
