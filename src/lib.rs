@@ -1,9 +1,14 @@
 //! Provides fixed-size string types [`StrArray`] and [`CStrArray`].
 //!
-//! [`StrArray`] serves as the `str` equivalent of `[u8; N]`, offering a `Deref`
-//! to `&str` and ensuring the UTF-8 invariant is always upheld, but with a
-//! size known at compile time. This is designed for `no_std` environments
-//! or where strings are always a certain size.
+//! [`StrArray`] serves as the `str` equivalent of `[u8; N]`.
+//! It provides a `Deref` to `&str` and ensures the UTF-8 invariant is
+//! always upheld, but has a size known at compile time.
+//!
+//! This is useful in some situations:
+//!
+//! - Resource-constrained `no_std` and no-`alloc` environments.
+//! - Defining UTF-8 strings directly in a stack array or static.
+//! - Types or parameters that require `&str` of some fixed length.
 //!
 //! The [`str_array!`] macro provides a compile-time-checked way to
 //! build [`StrArray`] values from string literals and constants.
