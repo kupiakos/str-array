@@ -1,7 +1,11 @@
 use core::slice;
-use core::{ffi::CStr, num::NonZeroU8};
+use core::{
+    ffi::CStr,
+    fmt::{self, Debug},
+    num::NonZeroU8,
+    ops::Deref,
+};
 
-use super::*;
 use crate::error::{CStrLenError, InteriorNulError};
 use NulByte::Nul;
 
@@ -220,7 +224,7 @@ impl<const N: usize> TryFrom<&CStr> for CStrArray<N> {
 #[cfg(feature = "alloc")]
 mod alloc {
     use super::*;
-    use ::alloc::ffi::CString;
+    use crate::*;
 
     impl<const N: usize> TryFrom<Box<CStr>> for CStrArray<N> {
         type Error = CStrLenError<N>;
@@ -420,7 +424,7 @@ impl<'a> CStrArrayBytes<&'a CStr> {
 /// assert_eq!(FROM_BYTES_ARRAY, *c"direct array");
 /// ```
 // TODO: Support plain string literals too (requires a nul check).
-// TODO: maybe just write `static STATIC = c"static"`
+// TODO: maybe just write `static STATIC = cstr!("static")`
 #[macro_export]
 macro_rules! cstr_array {
     // TODO: same caveats as str_array
@@ -448,4 +452,156 @@ macro_rules! cstr_array {
         ARRAY
     }};
     () => {};
+}
+
+#[cfg(test)]
+macro_rules! cstr {
+    ($x:literal) => {
+        match core::ffi::CStr::from_bytes_with_nul(concat!($x, "\0").as_bytes()) {
+            Ok(x) => x,
+            Err(_) => panic!(),
+        }
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ::alloc::format;
+
+    #[test]
+    fn test_new() {
+        let cstr = cstr!("hello");
+        let cstr_array = CStrArray::<5>::new(cstr).unwrap();
+        assert_eq!(cstr_array.as_c_str(), cstr);
+        assert_eq!(cstr_array.len(), 5);
+        assert!(!cstr_array.is_empty());
+
+        let cstr_long = cstr!("hellos");
+        let err = CStrArray::<5>::new(cstr_long).unwrap_err();
+        assert_eq!(err.src_len, 6);
+
+        let cstr_short = cstr!("hell");
+        let err = CStrArray::<5>::new(cstr_short).unwrap_err();
+        assert_eq!(err.src_len, 4);
+    }
+
+    #[test]
+    fn test_from_bytes_without_nul() {
+        let bytes = b"hello";
+        let cstr_array = CStrArray::from_bytes_without_nul(bytes).unwrap();
+        assert_eq!(cstr_array.as_bytes(), bytes);
+
+        let bytes_with_nul = b"he\0llo";
+        let err = CStrArray::from_bytes_without_nul(bytes_with_nul).unwrap_err();
+        assert_eq!(err.position, 2);
+    }
+
+    #[test]
+    fn test_empty() {
+        let empty = CStrArray::<0>::empty();
+        assert!(empty.is_empty());
+        assert_eq!(empty.len(), 0);
+        assert_eq!(empty.as_c_str(), <&CStr>::default());
+    }
+
+    #[test]
+    fn test_debug() {
+        let cstr_array = CStrArray::from_bytes_without_nul(b"hello").unwrap();
+        let s = format!("{:?}", cstr_array);
+        assert_eq!(s, r#""hello""#);
+    }
+
+    #[test]
+    fn test_as_bytes_with_nul() {
+        let cstr_array = CStrArray::from_bytes_without_nul(b"hello").unwrap();
+        assert_eq!(cstr_array.as_bytes_with_nul(), b"hello\0");
+    }
+
+    #[test]
+    fn test_into_bytes() {
+        let cstr_array = CStrArray::from_bytes_without_nul(b"hello").unwrap();
+        assert_eq!(cstr_array.into_bytes(), *b"hello");
+    }
+
+    #[test]
+    fn test_try_from_cstr() {
+        let cstr = cstr!("hello");
+        let cstr_array = CStrArray::<5>::try_from(cstr).unwrap();
+        assert_eq!(cstr_array.as_c_str(), cstr);
+
+        let cstr_long = cstr!("hellos");
+        let err = CStrArray::<5>::try_from(cstr_long).unwrap_err();
+        assert_eq!(err.src_len, 6);
+    }
+
+    #[test]
+    fn test_partial_eq() {
+        let cstr_array = CStrArray::from_bytes_without_nul(b"hello").unwrap();
+        let cstr = cstr!("hello");
+        assert_eq!(&cstr_array, cstr);
+        assert_eq!(cstr, &cstr_array);
+        assert_eq!(&cstr_array, &cstr);
+        assert_eq!(&cstr, &cstr_array);
+    }
+
+    #[test]
+    fn test_macro() {
+        let cstr_array = cstr_array!(cstr!("hello"));
+        assert_eq!(cstr_array.len(), 5);
+        assert_eq!(cstr_array, cstr!("hello"));
+
+        let str_array = cstr_array!("hello");
+        assert_eq!(str_array.len(), 5);
+        assert_eq!(str_array, cstr!("hello"));
+
+        let bytes_array = cstr_array!(b"hello");
+        assert_eq!(bytes_array.len(), 5);
+        assert_eq!(bytes_array, cstr!("hello"));
+    }
+
+    #[test]
+    #[deny(non_upper_case_globals)]
+    fn test_macro_items() {
+        cstr_array! {
+            static STATIC = cstr!("hello");
+            const CONST = "world";
+        }
+        assert_eq!(STATIC.len(), 5);
+        assert_eq!(STATIC, cstr!("hello"));
+        assert_eq!(CONST.len(), 5);
+        assert_eq!(CONST, cstr!("world"));
+    }
+}
+
+#[cfg(all(test, feature = "alloc"))]
+mod alloc_tests {
+    use super::*;
+    use ::alloc::{boxed::Box, ffi::CString, rc::Rc, sync::Arc};
+
+    #[test]
+    fn test_try_from_alloc() {
+        let cstr = cstr!("hello");
+        let cstring = CString::new("hello").unwrap();
+
+        let from_box = CStrArray::<5>::try_from(Box::from(cstr)).unwrap();
+        assert_eq!(from_box, cstr);
+
+        let from_rc = CStrArray::<5>::try_from(Rc::from(cstr)).unwrap();
+        assert_eq!(from_rc, cstr);
+
+        let from_arc = CStrArray::<5>::try_from(Arc::from(cstr)).unwrap();
+        assert_eq!(from_arc, cstr);
+
+        let from_cstring = CStrArray::<5>::try_from(cstring.clone()).unwrap();
+        assert_eq!(from_cstring, cstr);
+    }
+
+    #[test]
+    fn test_partial_eq_alloc() {
+        let cstr_array = CStrArray::from_bytes_without_nul(b"hello").unwrap();
+        let cstring = CString::new("hello").unwrap();
+        assert_eq!(cstr_array, *cstring);
+        assert_eq!(*cstring, cstr_array);
+    }
 }

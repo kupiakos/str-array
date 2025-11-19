@@ -276,4 +276,112 @@ mod tests {
         mut_s.make_ascii_uppercase();
         assert_eq!(mut_s, "HELLO");
     }
+
+    #[test]
+    fn test_try_from_mut_str() {
+        let mut s = *b"hello";
+        let s = str::from_utf8_mut(&mut s).unwrap();
+        let sa: &mut StrArray<5> = <&mut StrArray<5>>::try_from(&mut *s).unwrap();
+        sa.make_ascii_uppercase();
+        assert_eq!(s, "HELLO");
+    }
+
+    #[test]
+    fn test_try_from_mut_bytes() {
+        let mut b = *b"hello";
+        let sa: &mut StrArray<5> = <&mut StrArray<5>>::try_from(&mut b).unwrap();
+        sa.make_ascii_uppercase();
+        assert_eq!(sa, "HELLO");
+    }
+
+    #[test]
+    fn test_from_strarray_for_str() {
+        let s = str_array!("hello");
+        let r: &str = (&s).into();
+        assert_eq!(r, "hello");
+    }
+
+    #[test]
+    fn test_from_mut_strarray_for_mut_str() {
+        let mut s = str_array!("hello");
+        let r: &mut str = (&mut s).into();
+        r.make_ascii_uppercase();
+        assert_eq!(r, "HELLO");
+    }
+
+    #[test]
+    fn test_from_strarray_for_bytes() {
+        let s = str_array!("hello");
+        let r: &[u8; 5] = (&s).into();
+        assert_eq!(r, b"hello");
+    }
+
+    #[test]
+    fn test_from_strarray_for_byte_slice() {
+        let s = str_array!("hello");
+        let r: &[u8] = (&s).into();
+        assert_eq!(r, b"hello");
+    }
+}
+
+#[cfg(all(test, feature = "alloc"))]
+mod alloc_tests {
+    use super::*;
+    use ::alloc::{boxed::Box, rc::Rc, string::String, sync::Arc};
+
+    #[test]
+    fn test_try_from_string() {
+        let s = String::from("hello");
+        let sa: StrArray<5> = s.try_into().unwrap();
+        assert_eq!(sa, "hello");
+    }
+
+    #[test]
+    fn test_try_from_box_str() {
+        let s = String::from("hello").into_boxed_str();
+        let sa: StrArray<5> = s.try_into().unwrap();
+        assert_eq!(sa, "hello");
+    }
+
+    #[test]
+    fn test_try_from_rc_str() {
+        let s: Rc<str> = "hello".into();
+        let sa: StrArray<5> = s.try_into().unwrap();
+        assert_eq!(sa, "hello");
+    }
+
+    #[test]
+    fn test_try_from_arc_str() {
+        let s: Arc<str> = "hello".into();
+        let sa: StrArray<5> = s.try_into().unwrap();
+        assert_eq!(sa, "hello");
+    }
+
+    #[test]
+    fn test_into_string() {
+        let s = str_array!("hello");
+        let string: String = s.into();
+        assert_eq!(string, "hello");
+    }
+
+    #[test]
+    fn test_into_box_str() {
+        let s = str_array!("hello");
+        let b: Box<str> = s.into();
+        assert_eq!(&*b, "hello");
+    }
+
+    #[test]
+    fn test_into_rc_str() {
+        let s = str_array!("hello");
+        let r: Rc<str> = s.into();
+        assert_eq!(&*r, "hello");
+    }
+
+    #[test]
+    fn test_into_arc_str() {
+        let s = str_array!("hello");
+        let a: Arc<str> = s.into();
+        assert_eq!(&*a, "hello");
+    }
 }

@@ -125,4 +125,22 @@ mod tests {
         let err = InteriorNulError { position: 10 };
         assert_eq!(format!("{err}"), "Interior nul at byte 10");
     }
+
+    #[test]
+    #[should_panic = "Failed to build StrArray<N> from string with len != N"]
+    fn test_str_len_const_panic() {
+        StrLenError::<10> { src_len: 5 }.const_panic()
+    }
+
+    #[test]
+    #[should_panic = "Failed to build CStrArray<N> from string with len != N"]
+    fn test_cstr_len_const_panic() {
+        CStrLenError::<10> { src_len: 5 }.const_panic()
+    }
+
+    #[test]
+    #[should_panic = "Failed to build CStrArray with interior nul"]
+    fn test_interior_nul_const_panic() {
+        InteriorNulError { position: 10 }.const_panic()
+    }
 }

@@ -63,6 +63,7 @@ extern crate std;
 use alloc::{
     borrow::{Borrow, BorrowMut},
     boxed::Box,
+    ffi::CString,
     rc::Rc,
     string::String,
     sync::Arc,
@@ -562,6 +563,7 @@ macro_rules! str_array {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::format;
 
     trait TypeEq {
         type This;
@@ -624,5 +626,29 @@ mod tests {
     fn test_slice() {
         let a = str_array!("a");
         let _: &str = &a[..];
+    }
+
+    #[test]
+    fn test_zeroed() {
+        let s = StrArray::<4>::zeroed();
+        assert_eq!(s.as_bytes(), &[0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn test_empty() {
+        let s = StrArray::empty();
+        assert!(s.is_empty());
+    }
+
+    #[test]
+    fn test_display() {
+        let s = str_array!("hello");
+        assert_eq!(format!("{}", s), "hello");
+    }
+
+    #[test]
+    fn test_debug() {
+        let s = str_array!("hello");
+        assert_eq!(format!("{:?}", s), "StrArray<5>(\"hello\")");
     }
 }
