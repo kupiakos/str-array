@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  readme:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cargo-insert-docs
+        uses: actions-rs/install@v0.1
+        with:
+          crate: cargo-insert-docs
+          version: 1
+          use-tool-cache: true
+      - run: cargo insert-docs crate-into-readme --check
+
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cargo-msrv
+        uses: actions-rs/install@v0.1
+        with:
+          crate: cargo-msrv
+          version: 0.18
+          use-tool-cache: true
+      - run: cargo msrv verify
+
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # TODO: A rustc version matrix to trigger the correct `has_` cfgs.
+        features: ["", "alloc", "std"]
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+      - name: Show rustc version
+        run: rustc --version
+      - name: Run tests for feature matrix
+        run: |
+          FEATURES="${{ matrix.features }}"
+          FEATURE_FLAGS=${FEATURES:+--features $FEATURES}
+          cargo test --lib --verbose --no-default-features $FEATURE_FLAGS
