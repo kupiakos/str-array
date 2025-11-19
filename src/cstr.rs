@@ -16,6 +16,7 @@ enum NulByte {
     Nul = 0,
 }
 
+/// The same as `val.count_bytes()` but is `const` on low MSRV
 const fn count_bytes(val: &CStr) -> usize {
     // Avoid bumping the MSRV and stay `const` by using `unsafe`.
     let mut p = val.as_ptr();
@@ -52,9 +53,9 @@ impl<const N: usize> CStrArray<N> {
     ///
     /// [`cstr_array!`]: crate::cstr_array
     pub const fn new(val: &CStr) -> Result<Self, CStrLenError<N>> {
-        let other_len = count_bytes(val);
-        if other_len != N {
-            return Err(CStrLenError { src_len: other_len });
+        let src_len = count_bytes(val);
+        if src_len != N {
+            return Err(CStrLenError { src_len });
         }
         // SAFETY: `val` is checked to point to `N` non-nul bytes followed by a nul.
         Ok(unsafe { Self::new_unchecked(val) })
@@ -66,11 +67,34 @@ impl<const N: usize> CStrArray<N> {
     ///
     /// `val.count_bytes() == N` or else behavior is undefined.
     pub const unsafe fn new_unchecked(val: &CStr) -> Self {
-        // SAFETY: `val` is known to point to `N` non-nul bytes followed by a nul.
+
         CStrArray {
             data: unsafe { *val.as_ptr().cast() },
             nul: Nul,
         }
+    }
+
+    /// Converts a `&CStr` to a `&CStrArray<N>` with a length check.
+    pub const fn ref_from_c_str(val: &CStr) -> Result<&Self, CStrLenError<N>> {
+        let src_len = count_bytes(val);
+        if src_len != N {
+            return Err(CStrLenError { src_len });
+        }
+        // SAFETY: `val.count_bytes() == N`
+        Ok(unsafe { Self::ref_from_c_str_unchecked(val) })
+    }
+
+    /// Converts a `&CStr` to a `&CStrArray<N>` without a length check.
+    ///
+    /// # Safety
+    ///
+    /// `val.count_bytes() == N` or else behavior is undefined.
+    pub const unsafe fn ref_from_c_str_unchecked(val: &CStr) -> &Self {
+        // SAFETY:
+        // - The caller promises the string is `N` bytes long.
+        // - CStr thus promises that `as_ptr` points to `N` non-zero bytes
+        //   followed by a zero byte--the layout and bit validity of `Self`.
+        unsafe { &*val.as_ptr().cast() }
     }
 
     /// Constructs a `CStrArray<N>` from an array with its byte contents.
