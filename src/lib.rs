@@ -1,4 +1,4 @@
-//! Provides fixed-size string types [`StrArray`] and [`CStrArray`].
+//! Provides fixed-size string types [`StrArray<N>`] and [`CStrArray<N>`].
 //!
 //! [`StrArray`] serves as the `str` equivalent of `[u8; N]`.
 //! It provides a `Deref` to `&str` and ensures the UTF-8 invariant is
@@ -52,7 +52,8 @@
 //! assert_eq!(S4.len(), 7);
 //! ```
 #![no_std]
-#![deny(unsafe_op_in_unsafe_fn)]
+#![deny(missing_docs, unsafe_op_in_unsafe_fn)]
+#![deny(rustdoc::broken_intra_doc_links)]
 
 #[cfg(any(test, feature = "alloc"))]
 extern crate alloc;
@@ -94,12 +95,11 @@ pub mod __internal {
     pub use crate::cstr::{build_cstr, CStrArrayBytes};
 }
 
-/// Fixed-size [`str`] stored as a [`[u8; N]`][core::array].
+/// Fixed-size [`str`], backed by an array.
 ///
 /// `[u8; N]` is to `[u8]` as `StrArray<N>` is to `str`.
-/// `StrArray<N>` is a `[u8; N]` which upholds the same UTF-8
-/// invariant as `str`. It `Deref`s to `str` and
-/// can be accessed as a `[u8; N]`.
+/// It provides a `Deref` to `&str` and ensures the UTF-8 invariant is
+/// always upheld, but has a size known at compile time.
 ///
 /// [`str_array!`] provides a convenient way to construct
 /// and define `StrArray` from literals and constants.

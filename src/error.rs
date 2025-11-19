@@ -1,8 +1,11 @@
+//! Error types for array-backed strings.
+
 use super::*;
 
 /// Failed to build `StrArray<N>` from a different-length `&str`.
 #[derive(Clone, Copy)]
 pub struct StrLenError<const N: usize> {
+    /// The length of the source string that didn't match `N`.
     pub src_len: usize,
 }
 
@@ -34,6 +37,7 @@ impl<const N: usize> Error for StrLenError<N> {}
 /// Failed to build `CStrArray<N>` from a different-length `&CStr`.
 #[derive(Clone, Copy)]
 pub struct CStrLenError<const N: usize> {
+    /// The length of the source string that didn't match `N`.
     pub src_len: usize,
 }
 

@@ -4,7 +4,7 @@
 
 <!-- cargo insert-docs crate-into-readme --link-to-latest -->
 <!-- crate documentation start -->
-Provides fixed-size string types [`StrArray`] and [`CStrArray`].
+Provides fixed-size string types [`StrArray<N>`] and [`CStrArray<N>`].
 
 [`StrArray`] serves as the `str` equivalent of `[u8; N]`.
 It provides a `Deref` to `&str` and ensures the UTF-8 invariant is
@@ -58,7 +58,9 @@ str_array! {
 assert_eq!(S4.len(), 7);
 ```
 
+[`CStrArray<N>`]: https://docs.rs/str_array/latest/str_array/struct.CStrArray.html
 [`CStrArray`]: https://docs.rs/str_array/latest/str_array/struct.CStrArray.html
+[`StrArray<N>`]: https://docs.rs/str_array/latest/str_array/struct.StrArray.html
 [`StrArray`]: https://docs.rs/str_array/latest/str_array/struct.StrArray.html
 [`cstr_array!`]: https://docs.rs/str_array/latest/str_array/macro.cstr_array.html
 [`str_array!`]: https://docs.rs/str_array/latest/str_array/macro.str_array.html

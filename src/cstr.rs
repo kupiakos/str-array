@@ -27,7 +27,7 @@ const fn count_bytes(val: &CStr) -> usize {
     other_len
 }
 
-/// Fixed-size [`CStr`] stored as an array.
+/// Fixed-size [`CStr`], backed by an array.
 ///
 /// The length `N` is the number of bytes in the string _not_ including the nul terminator.
 ///
@@ -49,6 +49,8 @@ impl<const N: usize> CStrArray<N> {
     /// If `val` is a literal or `const`, consider using [`cstr_array!`]
     /// instead, which always builds a `CStrArray` with the correct `N`
     /// by checking the length at compile time.
+    ///
+    /// [`cstr_array!`]: crate::cstr_array
     pub const fn new(val: &CStr) -> Result<Self, CStrLenError<N>> {
         let other_len = count_bytes(val);
         if other_len != N {
@@ -78,6 +80,8 @@ impl<const N: usize> CStrArray<N> {
     ///
     /// If `val` is a literal or `const`, consider using [`cstr_array!`]
     /// instead, which checks for the presence of a nul at compile time.
+    ///
+    /// [`cstr_array!`]: crate::cstr_array
     pub const fn from_bytes_without_nul(bytes: &[u8; N]) -> Result<Self, InteriorNulError> {
         // Avoid bumping the MSRV and stay `const` by using a manual loop.
         let mut i = 0;
