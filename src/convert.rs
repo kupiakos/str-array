@@ -194,6 +194,7 @@ mod alloc {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::borrow::{Borrow, BorrowMut};
 
     #[test]
     fn test_borrow() {

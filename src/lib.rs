@@ -49,9 +49,9 @@
 #![no_std]
 #![deny(unsafe_op_in_unsafe_fn)]
 
-#[cfg(feature = "alloc")]
+#[cfg(any(test, feature = "alloc"))]
 extern crate alloc;
-#[cfg(feature = "std")]
+#[cfg(any(test, feature = "std"))]
 extern crate std;
 
 #[cfg(feature = "alloc")]

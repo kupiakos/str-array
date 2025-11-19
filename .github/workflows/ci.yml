@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo install cargo-insert-docs
-      - run: cargo insert-docs crate-into-readme --check
+      - run: cargo insert-docs crate-into-readme --check --link-to-latest
 
   msrv:
     runs-on: ubuntu-latest

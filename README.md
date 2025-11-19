@@ -2,6 +2,7 @@
 
 ![License: Apache-2.0 OR MIT](https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue) [![str_array on crates.io](https://img.shields.io/crates/v/str_array)](https://crates.io/crates/str_array) [![str_array on docs.rs](https://docs.rs/str_array/badge.svg)](https://docs.rs/str_array) [![Source Code Repository](https://img.shields.io/badge/Code-On%20GitHub-blue?logo=GitHub)](https://github.com/kupiakos/str-array) ![Rust Version: 1.64.0](https://img.shields.io/badge/rustc-1.64.0-orange.svg)
 
+<!-- cargo insert-docs crate-into-readme --link-to-latest -->
 <!-- crate documentation start -->
 Provides fixed-size string types [`StrArray`] and [`CStrArray`].
 
@@ -21,7 +22,7 @@ nul-terminated [`CStr`](https://doc.rust-lang.org/core/ffi/c_str/struct.CStr.htm
 - `no_std` support - disable default features to use without `std`
 - Optional `alloc` and `std` features
 - Full `const` support
-- [C string](https://docs.rs/str_array/0.2.0/str_array/struct.CStrArray.html) support
+- [C string](https://docs.rs/str_array/latest/str_array/struct.CStrArray.html) support
 
 ## Examples
 
@@ -52,10 +53,10 @@ str_array! {
 assert_eq!(S4.len(), 7);
 ```
 
-[`CStrArray`]: https://docs.rs/str_array/0.2.0/str_array/struct.CStrArray.html
-[`StrArray`]: https://docs.rs/str_array/0.2.0/str_array/struct.StrArray.html
-[`cstr_array!`]: https://docs.rs/str_array/0.2.0/str_array/macro.cstr_array.html
-[`str_array!`]: https://docs.rs/str_array/0.2.0/str_array/macro.str_array.html
+[`CStrArray`]: https://docs.rs/str_array/latest/str_array/struct.CStrArray.html
+[`StrArray`]: https://docs.rs/str_array/latest/str_array/struct.StrArray.html
+[`cstr_array!`]: https://docs.rs/str_array/latest/str_array/macro.cstr_array.html
+[`str_array!`]: https://docs.rs/str_array/latest/str_array/macro.str_array.html
 
 <!-- crate documentation end -->
 
