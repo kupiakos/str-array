@@ -163,6 +163,19 @@ impl<const N: usize> CStrArray<N> {
         unsafe { &*self.data.as_ptr().cast() }
     }
 
+    /// Converts this C string to a `&[NonZero<u8>]`.
+    pub const fn as_non_zero_bytes(&self) -> &[NonZeroU8] {
+        &self.data
+    }
+
+    /// Converts this C string to a `&mut [NonZero<u8>]`.
+    ///
+    /// This allows for safe in-place mutation of the C string contents
+    /// without changing its length.
+    pub const fn as_mut_non_zero_bytes(&mut self) -> &mut [NonZeroU8] {
+        &mut self.data
+    }
+
     /// Converts this C string to a byte slice containing the trailing 0 byte.
     ///
     /// The length of the slice is `N + 1`.
