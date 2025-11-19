@@ -188,7 +188,7 @@ impl<const N: usize> CStrArray<N> {
     }
 
     /// Converts this C string to a `&[NonZero<u8>]`.
-    pub const fn as_non_zero_bytes(&self) -> &[NonZeroU8] {
+    pub const fn as_non_zero_bytes(&self) -> &[NonZeroU8; N] {
         &self.data
     }
 
@@ -197,7 +197,7 @@ impl<const N: usize> CStrArray<N> {
         ///
         /// This allows for safe in-place mutation of the C string contents
         /// without changing its length.
-        pub fn as_mut_non_zero_bytes(&mut self) -> &mut [NonZeroU8] {
+        pub fn as_mut_non_zero_bytes(&mut self) -> &mut [NonZeroU8; N] {
             &mut self.data
         }
     }
@@ -306,7 +306,7 @@ impl<const N: usize> AsRef<[NonZeroU8]> for CStrArray<N> {
 
 impl<const N: usize> AsRef<[NonZeroU8; N]> for CStrArray<N> {
     fn as_ref(&self) -> &[NonZeroU8; N] {
-        &self.data
+        self.as_non_zero_bytes()
     }
 }
 
@@ -318,7 +318,7 @@ impl<const N: usize> AsMut<[NonZeroU8]> for CStrArray<N> {
 
 impl<const N: usize> AsMut<[NonZeroU8; N]> for CStrArray<N> {
     fn as_mut(&mut self) -> &mut [NonZeroU8; N] {
-        &mut self.data
+        self.as_mut_non_zero_bytes()
     }
 }
 
