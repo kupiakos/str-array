@@ -92,7 +92,7 @@ impl<const N: usize> CStrArray<N> {
             i += 1;
         }
         // SAFETY: `bytes` has been checked to contain no interior nul bytes
-        unsafe { Self::from_bytes_without_nul_unchecked(bytes) }
+        Ok(unsafe { Self::from_bytes_without_nul_unchecked(bytes) })
     }
 
     /// Constructs a `CStrArray<N>` from an array with its byte contents and no checks.
@@ -104,13 +104,13 @@ impl<const N: usize> CStrArray<N> {
     /// - `bytes` must not have any 0 (nul) bytes.
     pub const unsafe fn from_bytes_without_nul_unchecked(
         bytes: &[u8; N],
-    ) -> Result<Self, InteriorNulError> {
+    ) -> Self {
         // SAFETY: `bytes` does not contain any 0 values as promised by the caller.
         let nonzero: &[NonZeroU8; N] = unsafe { &*bytes.as_ptr().cast() };
-        Ok(Self {
+        Self {
             data: *nonzero,
             nul: Nul,
-        })
+        }
     }
 
     /// Returns the fixed length.
