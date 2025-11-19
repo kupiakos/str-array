@@ -161,12 +161,14 @@ macro_rules! const_mut_fn {
         $(#[$m])*
         ///
         /// This function is `const` if `&mut` is supported in `const`.
+        #[allow(clippy::incompatible_msrv)]
         $vis const unsafe fn $($rest)*
     };
     ($(#[$m:meta])* $vis:vis fn $($rest:tt)*) => {
         $(#[$m])*
         ///
         /// This function is `const` if `&mut` is supported in `const`.
+        #[allow(clippy::incompatible_msrv)]
         $vis const fn $($rest)*
     };
 }
@@ -452,19 +454,6 @@ impl<const N: usize> StrArray<N> {
     /// ```
     pub const fn into_bytes(self) -> [u8; N] {
         self.0
-    }
-
-    /// Returns the number of bytes in the string.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use str_array::str_array;
-    /// let s = str_array!("hello");
-    /// assert_eq!(s.len(), 5);
-    /// ```
-    pub const fn len(&self) -> usize {
-        N
     }
 }
 

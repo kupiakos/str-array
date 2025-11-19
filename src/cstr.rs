@@ -106,6 +106,7 @@ impl<const N: usize> CStrArray<N> {
     }
 
     /// Returns the fixed length.
+    #[allow(clippy::len_without_is_empty)]
     pub const fn len(&self) -> usize {
         N
     }
