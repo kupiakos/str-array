@@ -166,12 +166,16 @@ macro_rules! const_mut_fn {
     ($(#[$m:meta])* $vis:vis unsafe fn $($rest:tt)*) => {
         $(#[$m])*
         ///
+        /// # `const` support
+        ///
         /// This function is `const` if `&mut` is supported in `const`.
         #[allow(clippy::incompatible_msrv)]
         $vis const unsafe fn $($rest)*
     };
     ($(#[$m:meta])* $vis:vis fn $($rest:tt)*) => {
         $(#[$m])*
+        ///
+        /// # `const` support
         ///
         /// This function is `const` if `&mut` is supported in `const`.
         #[allow(clippy::incompatible_msrv)]
@@ -185,11 +189,15 @@ macro_rules! const_mut_fn {
     ($(#[$m:meta])* $vis:vis unsafe fn $($rest:tt)*) => {
         $(#[$m])*
         ///
+        /// # `const` support
+        ///
         /// This function is `const` if `&mut` is supported in `const`.
         $vis unsafe fn $($rest)*
     };
     ($(#[$m:meta])* $vis:vis fn $($rest:tt)*) => {
         $(#[$m])*
+        ///
+        /// # `const` support
         ///
         /// This function is `const` if `&mut` is supported in `const`.
         $vis fn $($rest)*
@@ -232,7 +240,7 @@ impl<const N: usize> StrArray<N> {
     ///
     /// # Safety
     ///
-    /// `val.len() >= N`
+    /// `val.len() >= N` or else behavior is undefined.
     pub const unsafe fn new_unchecked(val: &str) -> Self {
         // SAFETY: `val` has at least size `N` as promised by the caller.
         Self(unsafe { *(val.as_bytes() as *const [u8]).cast() })
@@ -240,7 +248,7 @@ impl<const N: usize> StrArray<N> {
 
     /// Converts a `&str` to `&StrArray<N>` without copying.
     ///
-    /// This returns an `Err` if `val.len() != N`.
+    /// Returns an `Err` if `val.len() != N`.
     ///
     /// # Examples
     ///
@@ -255,12 +263,32 @@ impl<const N: usize> StrArray<N> {
         if val.len() != N {
             return Err(StrLenError { src_len: val.len() });
         }
+        // SAFETY: val.len() == N.
+        Ok(unsafe {Self::ref_from_str_unchecked(val)})
+    }
+
+    /// Converts a `&str` to `&StrArray<N>` without copying and no length check.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use str_array::StrArray;
+    /// // SAFETY: "abc".len() == 3
+    /// let s: &StrArray<3> = unsafe {
+    ///     StrArray::ref_from_str_unchecked("abc")
+    /// };
+    /// assert_eq!(s.into_bytes(), [b'a', b'b', b'c']);
+    /// ```
+    ///
+    /// # Safety
+    ///
+    /// `val.len() == N` or else behavior is undefined.
+    pub const unsafe fn ref_from_str_unchecked(val: &str) -> &Self {
         // SAFETY:
         // - `StrArray<N>` is `repr(transparent)` over `[u8; N]`, as is `str`.
-        // - We've checked that `*val` has the same size as `[u8; N]`.
-        // - `str` is UTF-8, matching the requirement of Self::0.
-        // - `val` is valid UTF-8.
-        Ok(unsafe { &*val.as_ptr().cast() })
+        // - The caller has promised that `*val` has the same size as `[u8; N]`.
+        // - `val` is UTF-8, matching the requirement of `Self::0`.
+        unsafe { &*val.as_ptr().cast() }
     }
 
     const_mut_fn! {
@@ -285,11 +313,37 @@ impl<const N: usize> StrArray<N> {
                     src_len: val.len(),
                 });
             }
+            // SAFETY: val.len() == N.
+            Ok(unsafe { Self::mut_from_str_unchecked(val) })
+        }
+    }
+
+    const_mut_fn! {
+        /// Converts a `&mut str` to `&mut StrArray<N>` without copying and no length check.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// # use str_array::StrArray;
+        /// let mut s = String::from("abc");
+        ///
+        /// // SAFETY: `s.len() == 3`
+        /// let m: &mut StrArray<3> = unsafe {
+        ///     StrArray::mut_from_str_unchecked(&mut s)
+        /// };
+        /// m.make_ascii_uppercase();
+        /// assert_eq!(s, "ABC");
+        /// ```
+        ///
+        /// # Safety
+        ///
+        /// `val.len() == N` or else behavior is undefined.
+        pub unsafe fn mut_from_str_unchecked(val: &mut str) -> &mut Self {
             // SAFETY:
             // - `StrArray<N>` is `repr(transparent)` over `[u8; N]`, as is `str`.
-            // - We've checked that `*val` has the same size as `[u8; N]`.
-            // - `val` is valid UTF-8.
-            Ok(unsafe { &mut *val.as_mut_ptr().cast() })
+            // - The caller has promised that `*val` has the same size as `[u8; N]`.
+            // - `val` is UTF-8.
+            unsafe { &mut *val.as_mut_ptr().cast() }
         }
     }
 
@@ -309,6 +363,25 @@ impl<const N: usize> StrArray<N> {
         }
     }
 
+    /// Copies UTF-8 bytes from `val` into a `StrArray<N>` without a UTF-8 check.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use str_array::StrArray;
+    /// // SAFETY: "hello" is valid UTF-8.
+    /// let s = unsafe { StrArray::<5>::from_utf8_unchecked(b"hello") };
+    /// assert_eq!(s, "hello");
+    /// ```
+    ///
+    /// # Safety
+    ///
+    /// `val` must contain valid UTF-8 or behavior is undefined.
+    pub const unsafe fn from_utf8_unchecked(val: &[u8; N]) -> Self {
+        // SAFETY: The caller guarantees `val` is valid UTF-8.
+        Self(unsafe { *(val as *const [u8; N]).cast() })
+    }
+
     /// Converts UTF-8 bytes in `val` to `&StrArray<N>` without copying.
     ///
     /// # Examples
@@ -321,11 +394,32 @@ impl<const N: usize> StrArray<N> {
     pub const fn ref_from_utf8(val: &[u8; N]) -> Result<&Self, Utf8Error> {
         match core::str::from_utf8(val) {
             // SAFETY:
-            // - `StrArray<N>` is `repr(transparent)` over `[u8; N]`
-            // - `val` is valid UTF-8
+            // - `StrArray<N>` is `repr(transparent)` over `[u8; N]`.
+            // - `val` is valid UTF-8.
             Ok(_) => Ok(unsafe { &*(val as *const [u8; N]).cast() }),
             Err(e) => Err(e),
         }
+    }
+
+    /// Converts UTF-8 bytes in `val` to `&StrArray<N>` without a UTF-8 check.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use str_array::StrArray;
+    /// // SAFETY: "hello" is valid UTF-8
+    /// let s: &StrArray<5> = unsafe { StrArray::ref_from_utf8_unchecked(b"hello") };
+    /// assert_eq!(s, "hello");
+    /// ```
+    ///
+    /// # Safety
+    ///
+    /// `val` must contain valid UTF-8 or behavior is undefined.
+    pub const unsafe fn ref_from_utf8_unchecked(val: &[u8; N]) -> &Self {
+        // SAFETY:
+        // - `StrArray<N>` is `repr(transparent)` over `[u8; N]`.
+        // - The caller guarantees `val` is valid UTF-8.
+        unsafe { &*(val as *const [u8; N]).cast() }
     }
 
     const_mut_fn! {
@@ -347,6 +441,32 @@ impl<const N: usize> StrArray<N> {
                 Ok(_) => Ok(unsafe { &mut *(val as *mut [u8; N]).cast() }),
                 Err(e) => Err(e),
             }
+        }
+    }
+
+    const_mut_fn! {
+        /// Converts UTF-8 bytes in `val` to `&mut StrArray<N>` without a UTF-8 check.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// # use str_array::StrArray;
+        /// let mut bytes = *b"HELLO";
+        ///
+        /// // SAFETY: "HELLO" is valid UTF-8
+        /// let s: &mut StrArray<5> = unsafe { StrArray::mut_from_utf8_unchecked(&mut bytes) };
+        /// s.make_ascii_lowercase();
+        /// assert_eq!(s, "hello");
+        /// ```
+        ///
+        /// # Safety
+        ///
+        /// `val` must contain valid UTF-8 or behavior is undefined.
+        pub unsafe fn mut_from_utf8_unchecked(val: &mut [u8; N]) -> &mut Self {
+            // SAFETY:
+            // - `StrArray<N>` is `repr(transparent)` over `[u8; N]`.
+            // - The caller guarantees `val` is valid UTF-8.
+            unsafe { &mut *(val as *mut [u8; N]).cast() }
         }
     }
 
@@ -436,6 +556,7 @@ impl<const N: usize> StrArray<N> {
         /// ```
         ///
         /// # Safety
+        ///
         /// This has the same non-local requirement as [`str::as_bytes_mut`]:
         ///
         /// The caller must ensure that the content of the array is valid UTF-8
