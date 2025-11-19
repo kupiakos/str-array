@@ -264,7 +264,7 @@ impl<const N: usize> StrArray<N> {
             return Err(StrLenError { src_len: val.len() });
         }
         // SAFETY: val.len() == N.
-        Ok(unsafe {Self::ref_from_str_unchecked(val)})
+        Ok(unsafe { Self::ref_from_str_unchecked(val) })
     }
 
     /// Converts a `&str` to `&StrArray<N>` without copying and no length check.
