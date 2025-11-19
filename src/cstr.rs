@@ -67,7 +67,6 @@ impl<const N: usize> CStrArray<N> {
     ///
     /// `val.count_bytes() == N` or else behavior is undefined.
     pub const unsafe fn new_unchecked(val: &CStr) -> Self {
-
         CStrArray {
             data: unsafe { *val.as_ptr().cast() },
             nul: Nul,
@@ -92,9 +91,36 @@ impl<const N: usize> CStrArray<N> {
     pub const unsafe fn ref_from_c_str_unchecked(val: &CStr) -> &Self {
         // SAFETY:
         // - The caller promises the string is `N` bytes long.
-        // - CStr thus promises that `as_ptr` points to `N` non-zero bytes
+        // - `CStr` thus promises that `as_ptr` points to `N` non-zero bytes
         //   followed by a zero byte--the layout and bit validity of `Self`.
         unsafe { &*val.as_ptr().cast() }
+    }
+
+    const_mut_fn! {
+        /// Converts a `&mut CStr` to a `&mut CStrArray<N>` with a length check.
+        pub fn mut_from_c_str(val: &mut CStr) -> Result<&mut Self, CStrLenError<N>> {
+            let src_len = count_bytes(val);
+            if src_len != N {
+                return Err(CStrLenError { src_len });
+            }
+            // SAFETY: `val.count_bytes() == N`
+            Ok(unsafe { Self::mut_from_c_str_unchecked(val) })
+        }
+    }
+
+    const_mut_fn! {
+        /// Converts a `&mut CStr` to a `&mut CStrArray<N>` without a length check.
+        ///
+        /// # Safety
+        ///
+        /// `val.count_bytes() == N` or else behavior is undefined.
+        pub unsafe fn mut_from_c_str_unchecked(val: &mut CStr) -> &mut Self {
+            // SAFETY:
+            // - The caller promises the string is `N` bytes long.
+            // - `CStr` thus promises that `as_ptr` points to `N` non-zero bytes
+            //   followed by a zero byte--the layout and bit validity of `Self`.
+            unsafe { &mut *(val.as_ptr().cast::<Self>() as *mut Self) }
+        }
     }
 
     /// Constructs a `CStrArray<N>` from an array with its byte contents.
@@ -127,9 +153,7 @@ impl<const N: usize> CStrArray<N> {
     /// # Safety
     ///
     /// `bytes` must not have any 0 (nul) bytes.
-    pub const unsafe fn from_bytes_without_nul_unchecked(
-        bytes: &[u8; N],
-    ) -> Self {
+    pub const unsafe fn from_bytes_without_nul_unchecked(bytes: &[u8; N]) -> Self {
         // SAFETY: `bytes` does not contain any 0 values as promised by the caller.
         let nonzero: &[NonZeroU8; N] = unsafe { &*bytes.as_ptr().cast() };
         Self {
@@ -168,12 +192,14 @@ impl<const N: usize> CStrArray<N> {
         &self.data
     }
 
-    /// Converts this C string to a `&mut [NonZero<u8>]`.
-    ///
-    /// This allows for safe in-place mutation of the C string contents
-    /// without changing its length.
-    pub const fn as_mut_non_zero_bytes(&mut self) -> &mut [NonZeroU8] {
-        &mut self.data
+    const_mut_fn! {
+        /// Converts this C string to a `&mut [NonZero<u8>]`.
+        ///
+        /// This allows for safe in-place mutation of the C string contents
+        /// without changing its length.
+        pub fn as_mut_non_zero_bytes(&mut self) -> &mut [NonZeroU8] {
+            &mut self.data
+        }
     }
 
     /// Converts this C string to a byte slice containing the trailing 0 byte.
@@ -263,6 +289,67 @@ impl<const N: usize> TryFrom<&CStr> for CStrArray<N> {
     }
 }
 
+impl<const N: usize> TryFrom<&[u8; N]> for CStrArray<N> {
+    type Error = InteriorNulError;
+
+    fn try_from(val: &[u8; N]) -> Result<Self, Self::Error> {
+        // Reuse existing constructor which checks for interior nul bytes.
+        CStrArray::from_bytes_without_nul(val)
+    }
+}
+
+impl<const N: usize> AsRef<[NonZeroU8]> for CStrArray<N> {
+    fn as_ref(&self) -> &[NonZeroU8] {
+        self.as_non_zero_bytes()
+    }
+}
+
+impl<const N: usize> AsRef<[NonZeroU8; N]> for CStrArray<N> {
+    fn as_ref(&self) -> &[NonZeroU8; N] {
+        &self.data
+    }
+}
+
+impl<const N: usize> AsMut<[NonZeroU8]> for CStrArray<N> {
+    fn as_mut(&mut self) -> &mut [NonZeroU8] {
+        self.as_mut_non_zero_bytes()
+    }
+}
+
+impl<const N: usize> AsMut<[NonZeroU8; N]> for CStrArray<N> {
+    fn as_mut(&mut self) -> &mut [NonZeroU8; N] {
+        &mut self.data
+    }
+}
+
+impl<const N: usize> AsRef<[u8]> for CStrArray<N> {
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
+impl<const N: usize> AsRef<[u8; N]> for CStrArray<N> {
+    fn as_ref(&self) -> &[u8; N] {
+        self.as_bytes()
+    }
+}
+
+impl<'a, const N: usize> TryFrom<&'a CStr> for &'a CStrArray<N> {
+    type Error = CStrLenError<N>;
+
+    fn try_from(val: &'a CStr) -> Result<&'a CStrArray<N>, Self::Error> {
+        CStrArray::ref_from_c_str(val)
+    }
+}
+
+impl<'a, const N: usize> TryFrom<&'a mut CStr> for &'a mut CStrArray<N> {
+    type Error = CStrLenError<N>;
+
+    fn try_from(val: &'a mut CStr) -> Result<&'a mut CStrArray<N>, Self::Error> {
+        CStrArray::mut_from_c_str(val)
+    }
+}
+
 #[cfg(feature = "alloc")]
 mod alloc {
     use super::*;
@@ -297,6 +384,31 @@ mod alloc {
 
         fn try_from(val: CString) -> Result<Self, Self::Error> {
             Self::new(&val)
+        }
+    }
+
+    impl<const N: usize> From<CStrArray<N>> for CString {
+        fn from(val: CStrArray<N>) -> Self {
+            // `as_bytes()` is guaranteed to contain no interior nul bytes.
+            CString::from(val.as_c_str())
+        }
+    }
+
+    impl<const N: usize> From<CStrArray<N>> for Box<CStr> {
+        fn from(val: CStrArray<N>) -> Self {
+            Box::from(val.as_c_str())
+        }
+    }
+
+    impl<const N: usize> From<CStrArray<N>> for Rc<CStr> {
+        fn from(val: CStrArray<N>) -> Self {
+            Rc::from(val.as_c_str())
+        }
+    }
+
+    impl<const N: usize> From<CStrArray<N>> for Arc<CStr> {
+        fn from(val: CStrArray<N>) -> Self {
+            Arc::from(val.as_c_str())
         }
     }
 
