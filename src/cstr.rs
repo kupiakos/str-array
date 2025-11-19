@@ -158,7 +158,7 @@ impl<const N: usize> CStrArray<N> {
     ///
     /// This uses the same name as [`CStr::count_bytes`] to prevent
     /// it from being called with `Deref`.
-    #[deprecated = "use len"]
+    #[deprecated = "use `len`"]
     pub const fn count_bytes(&self) -> usize {
         self.len()
     }
@@ -167,7 +167,7 @@ impl<const N: usize> CStrArray<N> {
     ///
     /// This uses the same name as [`CStr::to_bytes`] to prevent
     /// it from being called with `Deref`.
-    #[deprecated = "use as_bytes"]
+    #[deprecated = "use `as_bytes`"]
     pub const fn to_bytes(&self) -> &[u8] {
         self.as_bytes()
     }
@@ -176,7 +176,7 @@ impl<const N: usize> CStrArray<N> {
     ///
     /// This uses the same name as [`CStr::to_bytes_with_nul`] to prevent
     /// it from being called with `Deref`.
-    #[deprecated = "use as_bytes_with_nul"]
+    #[deprecated = "use `as_bytes_with_nul`"]
     pub const fn to_bytes_with_nul(&self) -> &[u8] {
         self.as_bytes_with_nul()
     }
