@@ -35,7 +35,44 @@ const fn count_bytes(val: &CStr) -> usize {
 ///
 /// Because it has a fixed size, it can be put directly in a `static` and all
 /// casting operations are constant-time.
-// Note: As of writing, `&mut CStr` is not sound to construct.
+///
+/// # Examples
+///
+/// Small C strings of fixed size:
+///
+/// ```
+/// # use str_array::cstr_array;
+/// let mut airports = [
+///     cstr_array!("JFK"), cstr_array!("LAX"),
+///     cstr_array!("LHR"), cstr_array!("CDG"),
+///     cstr_array!("HND"), cstr_array!("PEK"),
+///     cstr_array!("DXB"), cstr_array!("AMS"),
+///     cstr_array!("FRA"), cstr_array!("SIN"),
+/// ];
+///
+/// // All of the C strings are contiguous in memory.
+/// assert_eq!(core::mem::size_of_val(&airports), 40);
+///
+/// airports.sort();
+/// assert_eq!(airports[0], c"AMS");
+/// ```
+///
+/// Storing `CStr` contents directly in a `static`:
+///
+/// ```
+/// # use core::mem::size_of_val;
+/// # use str_array::cstr_array;
+/// cstr_array! {
+///     static FOO = include_str!("foo.txt");
+///     static mut FOO_MUT = c"c string buffer";
+/// }
+/// assert_eq!(&FOO, c"Hello, world!");
+/// assert_eq!(size_of_val(&FOO), 14);
+/// let foo_mut = unsafe { &mut *&raw mut FOO_MUT };
+/// foo_mut.as_mut_nonzero_bytes()[0] = b'C'.try_into().unwrap();
+/// assert_eq!(foo_mut, c"C string buffer");
+/// assert_eq!(size_of_val(foo_mut), 16);
+/// ```
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 #[repr(C)]
 pub struct CStrArray<const N: usize> {
@@ -52,6 +89,18 @@ impl<const N: usize> CStrArray<N> {
     /// instead, which always builds a `CStrArray` with the correct `N`
     /// by checking the length at compile time.
     ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::ffi::CString;
+    /// # use str_array::CStrArray;
+    /// let cstring = CString::new(format!("he{}", "llo")).unwrap();
+    /// let s = CStrArray::<5>::new(&cstring).unwrap();
+    /// assert_eq!(s, c"hello");
+    ///
+    /// assert!(CStrArray::<5>::new(c"foo").is_err());
+    /// ```
+    ///
     /// [`cstr_array!`]: crate::cstr_array
     pub const fn new(val: &CStr) -> Result<Self, CStrLenError<N>> {
         let src_len = count_bytes(val);
@@ -64,6 +113,15 @@ impl<const N: usize> CStrArray<N> {
 
     /// Builds a `StrArray<N>` from `val` without a size check.
     ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use str_array::CStrArray;
+    /// // SAFETY: c"hello".count_bytes() == 5
+    /// let s = unsafe { CStrArray::<5>::new_unchecked(c"hello") };
+    /// assert_eq!(s, c"hello");
+    /// ```
+    ///
     /// # Safety
     ///
     /// `val.count_bytes() == N` or else behavior is undefined.
@@ -75,6 +133,17 @@ impl<const N: usize> CStrArray<N> {
     }
 
     /// Converts a `&CStr` to a `&CStrArray<N>` with a length check.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::ffi::CString;
+    /// # use str_array::CStrArray;
+    /// let s: &CStrArray<5> = CStrArray::ref_from_c_str(c"hello").unwrap();
+    /// assert_eq!(s, c"hello");
+    ///
+    /// assert!(CStrArray::<5>::ref_from_c_str(c"foo").is_err());
+    /// ```
     pub const fn ref_from_c_str(val: &CStr) -> Result<&Self, CStrLenError<N>> {
         let src_len = count_bytes(val);
         if src_len != N {
@@ -85,6 +154,17 @@ impl<const N: usize> CStrArray<N> {
     }
 
     /// Converts a `&CStr` to a `&CStrArray<N>` without a length check.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use str_array::CStrArray;
+    /// // SAFETY: c"abc".count_bytes() == 3
+    /// let s: &CStrArray<3> = unsafe {
+    ///     CStrArray::ref_from_c_str_unchecked(c"abc")
+    /// };
+    /// assert_eq!(s.into_bytes(), [b'a', b'b', b'c']);
+    /// ```
     ///
     /// # Safety
     ///
@@ -99,6 +179,20 @@ impl<const N: usize> CStrArray<N> {
 
     const_mut_fn! {
         /// Converts a `&mut CStr` to a `&mut CStrArray<N>` with a length check.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// # use std::ffi::CString;
+        /// # use str_array::CStrArray;
+        /// let mut boxed = CString::new("hello").unwrap().into_boxed_c_str();
+        /// let s_mut = CStrArray::<5>::mut_from_c_str(&mut boxed).unwrap();
+        /// s_mut.as_mut_nonzero_bytes()[0] = b'H'.try_into().unwrap();
+        /// assert_eq!(&*boxed, c"Hello");
+        ///
+        /// let mut short = CString::new("foo").unwrap().into_boxed_c_str();
+        /// assert!(CStrArray::<5>::mut_from_c_str(&mut short).is_err());
+        /// ```
         pub fn mut_from_c_str(val: &mut CStr) -> Result<&mut Self, CStrLenError<N>> {
             let src_len = count_bytes(val);
             if src_len != N {
@@ -111,6 +205,21 @@ impl<const N: usize> CStrArray<N> {
 
     const_mut_fn! {
         /// Converts a `&mut CStr` to a `&mut CStrArray<N>` without a length check.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// # use std::ffi::CString;
+        /// # use str_array::CStrArray;
+        /// let mut boxed = CString::new("abc").unwrap().into_boxed_c_str();
+        ///
+        /// // SAFETY: boxed.count_bytes() == 3
+        /// let m: &mut CStrArray<3> = unsafe {
+        ///     CStrArray::mut_from_c_str_unchecked(&mut boxed)
+        /// };
+        /// m.as_mut_nonzero_bytes()[0] = b'A'.try_into().unwrap();
+        /// assert_eq!(&*boxed, c"Abc");
+        /// ```
         ///
         /// # Safety
         ///
@@ -132,6 +241,17 @@ impl<const N: usize> CStrArray<N> {
     /// If `val` is a literal or `const`, consider using [`cstr_array!`]
     /// instead, which checks for the presence of a nul at compile time.
     ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use str_array::CStrArray;
+    /// let s = CStrArray::from_bytes_without_nul(b"hello").unwrap();
+    /// assert_eq!(s, c"hello");
+    ///
+    /// let bytes_with_nul = b"he\0lo";
+    /// assert!(CStrArray::from_bytes_without_nul(bytes_with_nul).is_err());
+    /// ```
+    ///
     /// [`cstr_array!`]: crate::cstr_array
     pub const fn from_bytes_without_nul(bytes: &[u8; N]) -> Result<Self, InteriorNulError> {
         // Avoid bumping the MSRV and stay `const` by using a manual loop.
@@ -151,6 +271,15 @@ impl<const N: usize> CStrArray<N> {
     /// Note that this does _not_ include the nul terminator -
     /// it is appended automatically.
     ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use str_array::CStrArray;
+    /// // SAFETY: b"hello" contains no nul bytes
+    /// let s = unsafe { CStrArray::from_bytes_without_nul_unchecked(b"hello") };
+    /// assert_eq!(s, c"hello");
+    /// ```
+    ///
     /// # Safety
     ///
     /// `bytes` must not have any 0 (nul) bytes.
@@ -164,6 +293,14 @@ impl<const N: usize> CStrArray<N> {
     }
 
     /// Returns the fixed length.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use str_array::cstr_array;
+    /// let s = cstr_array!(c"hello");
+    /// assert_eq!(s.len(), 5);
+    /// ```
     #[allow(clippy::len_without_is_empty)]
     pub const fn len(&self) -> usize {
         N
@@ -172,6 +309,15 @@ impl<const N: usize> CStrArray<N> {
     /// Borrows this `CStrArray` as a `&CStr`.
     ///
     /// This is called by `Deref` automatically.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use str_array::cstr_array;
+    /// let s = cstr_array!(c"hello");
+    /// assert_eq!(s.as_c_str().to_str().unwrap(), "hello");
+    /// assert_eq!(s.to_str().unwrap(), "hello");  // using deref
+    /// ```
     pub const fn as_c_str(&self) -> &CStr {
         // SAFETY:
         // - The first `N` bytes of `self` (`data` field) are kept non-nul.
@@ -183,13 +329,34 @@ impl<const N: usize> CStrArray<N> {
     ///
     /// The returned slice will not contain the trailing nul terminator
     /// that this C string has.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use str_array::cstr_array;
+    /// let x = cstr_array!(c"Hello");
+    /// let &[a, b @ .., c] = x.as_bytes();
+    /// assert_eq!(a, b'H');
+    /// assert_eq!(b, *b"ell");
+    /// assert_eq!(c, b'o');
+    /// ```
     pub const fn as_bytes(&self) -> &[u8; N] {
         // SAFETY: `[NonZeroU8; N]` has the same layout as `[u8; N]` and cannot be mutated through a reference.
         unsafe { &*self.data.as_ptr().cast() }
     }
 
     /// Converts this C string to a `&[NonZero<u8>]`.
-    pub const fn as_non_zero_bytes(&self) -> &[NonZeroU8; N] {
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use str_array::cstr_array;
+    /// let s = cstr_array!(c"hello");
+    /// let bytes = s.as_nonzero_bytes();
+    /// assert_eq!(bytes.len(), 5);
+    /// assert_eq!(bytes[0].get(), b'h');
+    /// ```
+    pub const fn as_nonzero_bytes(&self) -> &[NonZeroU8; N] {
         &self.data
     }
 
@@ -198,7 +365,16 @@ impl<const N: usize> CStrArray<N> {
         ///
         /// This allows for safe in-place mutation of the C string contents
         /// without changing its length.
-        pub fn as_mut_non_zero_bytes(&mut self) -> &mut [NonZeroU8; N] {
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// # use str_array::cstr_array;
+        /// let mut s = cstr_array!(c"hello");
+        /// s.as_mut_nonzero_bytes()[0] = b'H'.try_into().unwrap();
+        /// assert_eq!(s, c"Hello");
+        /// ```
+        pub fn as_mut_nonzero_bytes(&mut self) -> &mut [NonZeroU8; N] {
             &mut self.data
         }
     }
@@ -206,6 +382,15 @@ impl<const N: usize> CStrArray<N> {
     /// Converts this C string to a byte slice containing the trailing 0 byte.
     ///
     /// The length of the slice is `N + 1`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use str_array::cstr_array;
+    /// let s = cstr_array!(c"hello");
+    /// assert_eq!(s.as_bytes_with_nul(), b"hello\0");
+    /// assert_eq!(s.as_bytes_with_nul().len(), 6);
+    /// ```
     pub const fn as_bytes_with_nul(&self) -> &[u8] {
         // SAFETY:
         // - `Self` uses the `repr(C)` layout algorithm.
@@ -215,6 +400,18 @@ impl<const N: usize> CStrArray<N> {
     }
 
     /// Consumes `self` into its underlying array.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use str_array::cstr_array;
+    /// let x = cstr_array!(c"Fizzy");
+    ///
+    /// let [a, b @ .., c] = x.into_bytes();
+    /// assert_eq!(a, b'F');
+    /// assert_eq!(b, *b"izz");
+    /// assert_eq!(c, b'y');
+    /// ```
     pub const fn into_bytes(self) -> [u8; N] {
         *self.as_bytes()
     }
@@ -301,25 +498,25 @@ impl<const N: usize> TryFrom<&[u8; N]> for CStrArray<N> {
 
 impl<const N: usize> AsRef<[NonZeroU8]> for CStrArray<N> {
     fn as_ref(&self) -> &[NonZeroU8] {
-        self.as_non_zero_bytes()
+        self.as_nonzero_bytes()
     }
 }
 
 impl<const N: usize> AsRef<[NonZeroU8; N]> for CStrArray<N> {
     fn as_ref(&self) -> &[NonZeroU8; N] {
-        self.as_non_zero_bytes()
+        self.as_nonzero_bytes()
     }
 }
 
 impl<const N: usize> AsMut<[NonZeroU8]> for CStrArray<N> {
     fn as_mut(&mut self) -> &mut [NonZeroU8] {
-        self.as_mut_non_zero_bytes()
+        self.as_mut_nonzero_bytes()
     }
 }
 
 impl<const N: usize> AsMut<[NonZeroU8; N]> for CStrArray<N> {
     fn as_mut(&mut self) -> &mut [NonZeroU8; N] {
-        self.as_mut_non_zero_bytes()
+        self.as_mut_nonzero_bytes()
     }
 }
 

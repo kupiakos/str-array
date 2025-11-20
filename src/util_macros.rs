@@ -1,4 +1,3 @@
-
 /// Wraps a _single function_ to be a `const` mut fn.
 ///
 /// The `build.rs` checks if `&mut` works in `const` to enable `cfg(has_const_mut)`.

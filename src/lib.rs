@@ -129,14 +129,17 @@ pub mod __internal {
 ///
 /// # Examples
 ///
-/// Small strings that still must be UTF-8:
+/// Small UTF-8 strings of fixed size:
+///
 /// ```
-/// # use str_array::{StrArray, str_array};
-/// type AirportCode = StrArray<3>;
+/// # use str_array::str_array;
 /// let mut airports = [
-///     "JFK", "LAX", "LHR", "CDG", "HND",
-///     "PEK", "DXB", "AMS", "FRA", "SIN",
-/// ].map(|code| AirportCode::new(code).unwrap());
+///     str_array!("JFK"), str_array!("LAX"),
+///     str_array!("LHR"), str_array!("CDG"),
+///     str_array!("HND"), str_array!("PEK"),
+///     str_array!("DXB"), str_array!("AMS"),
+///     str_array!("FRA"), str_array!("SIN"),
+/// ];
 ///
 /// // All of the strings are contiguous in memory.
 /// assert_eq!(core::mem::size_of_val(&airports), 30);
@@ -149,7 +152,7 @@ pub mod __internal {
 ///
 /// ```
 /// # use core::mem::size_of_val;
-/// # use str_array::{StrArray, str_array};
+/// # use str_array::str_array;
 /// str_array! {
 ///     static FOO = include_str!("foo.txt");
 ///     static mut FOO_MUT = "utf-8 buffer";
@@ -193,7 +196,7 @@ impl<const N: usize> StrArray<N> {
     ///
     /// ```
     /// # use str_array::StrArray;
-    /// let s = StrArray::<5>::new("hello").unwrap();
+    /// let s = StrArray::<5>::new(&format!("he{}", "llo")).unwrap();
     /// assert_eq!(s, "hello");
     /// assert!(StrArray::<5>::new("foo").is_err());
     /// ```
