@@ -371,8 +371,8 @@ impl<const N: usize> CStrArray<N> {
             // dropping the metadata as when casting to a pointer-to-`Sized`.
             // This code bets that when `extern type` is stabilized and `CStr` is switched over
             // to use it that this will remain true and valid.
+            let as_slice: *mut [c_char] = core::ptr::slice_from_raw_parts_mut(self.as_mut_ptr(), N + 1);
 
-            let as_slice: *mut [u8] = core::ptr::slice_from_raw_parts_mut((self as *mut Self).cast(), N + 1);
             // SAFETY:
             // - The first `N` bytes of `self` (`data` field) are kept non-nul.
             // - The last byte of `self` is always a nul byte.
@@ -459,6 +459,41 @@ impl<const N: usize> CStrArray<N> {
         // - The total size of `Self` is `N + 1`
         // - All bytes in `Self` are initialized.
         unsafe { slice::from_raw_parts(self as *const _ as *const u8, N + 1) }
+    }
+
+    const_mut_fn! {
+        /// Returns the mutable inner pointer to this C string.
+        ///
+        /// The returned pointer will be valid for as long as `self` is,
+        /// and points to a contiguous region of memory terminated with
+        /// a 0 byte to represent the end of the string.
+        ///
+        /// The type of the returned pointer is `*mut c_char`, and whether
+        /// it’s an alias for `*mut i8` or `*mut u8` is platform-specific.
+        ///
+        /// **WARNING**
+        ///
+        /// The returned pointer can be mutated through, but certain constraints
+        /// must be upheld:
+        ///
+        /// - It is your responsibility to make sure that the underlying memory
+        ///   is not freed too early.
+        /// - The nul terminator cannot be relocated to earlier in the string.
+        ///   In other words, the length of the C string cannot be changed.
+        ///   This restriction can never be loosened, as the first `N` bytes
+        ///   of `self` is required to have non-zero contents.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// # use str_array::cstr_array;
+        /// let mut s = cstr_array!("hello");
+        /// unsafe { s.as_mut_ptr().cast::<u8>().write(b'J') }
+        /// assert_eq!(s, c"Jello");
+        /// ```
+        pub fn as_mut_ptr(&mut self) -> *mut c_char {
+            self as *mut Self as *mut c_char
+        }
     }
 
     /// Consumes `self` into its underlying array.
