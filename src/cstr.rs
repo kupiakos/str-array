@@ -6,6 +6,7 @@ use core::{
     ops::Deref,
 };
 
+use crate::const_mut_fn;
 use crate::error::{CStrLenError, InteriorNulError};
 use NulByte::Nul;
 

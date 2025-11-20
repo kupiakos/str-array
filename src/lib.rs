@@ -81,59 +81,17 @@ use core::error::Error;
 #[cfg(all(not(has_core_error), feature = "std"))]
 use std::error::Error;
 
-/// Wraps a _single function_ to be a `const` mut fn.
-///
-/// The `build.rs` checks if `&mut` works in `const` to enable `cfg(has_const_mut)`.
-#[cfg(has_const_mut)]
-macro_rules! const_mut_fn {
-    ($(#[$m:meta])* $vis:vis unsafe fn $($rest:tt)*) => {
-        $(#[$m])*
-        ///
-        /// # `const` support
-        ///
-        /// This function is `const` if `&mut` is supported in `const`.
-        #[allow(clippy::incompatible_msrv)]
-        $vis const unsafe fn $($rest)*
-    };
-    ($(#[$m:meta])* $vis:vis fn $($rest:tt)*) => {
-        $(#[$m])*
-        ///
-        /// # `const` support
-        ///
-        /// This function is `const` if `&mut` is supported in `const`.
-        #[allow(clippy::incompatible_msrv)]
-        $vis const fn $($rest)*
-    };
-}
-
-/// The `build.rs` checks if `&mut` works in `const` to enable `cfg(has_const_mut)`.
-#[cfg(not(has_const_mut))]
-macro_rules! const_mut_fn {
-    ($(#[$m:meta])* $vis:vis unsafe fn $($rest:tt)*) => {
-        $(#[$m])*
-        ///
-        /// # `const` support
-        ///
-        /// This function is `const` if `&mut` is supported in `const`.
-        $vis unsafe fn $($rest)*
-    };
-    ($(#[$m:meta])* $vis:vis fn $($rest:tt)*) => {
-        $(#[$m])*
-        ///
-        /// # `const` support
-        ///
-        /// This function is `const` if `&mut` is supported in `const`.
-        $vis fn $($rest)*
-    };
-}
-
 mod cmp;
 mod convert;
 mod cstr;
 pub mod error;
 
-pub use cstr::CStrArray;
+mod util_macros;
+
 use error::StrLenError;
+use util_macros::const_mut_fn;
+
+pub use cstr::CStrArray;
 
 /// Internal-only items which may change with a non-breaking release.
 #[doc(hidden)]
@@ -648,13 +606,16 @@ impl<const N: usize> DerefMut for StrArray<N> {
 /// ```
 #[macro_export]
 macro_rules! str_array {
-    // Is there a way to avoid the double-evaluation of `$val` for item declarations
-    // without adding a dependency or proc-macro (`paste`)?
+    // This rule could be moved to another utility macro, but the inability to
+    // `macro_export` solely in the `mod __internal` leads me to leave this here.
+    // If only I could `doc(hidden)` utility segments of a macro_rules!
     (@impl item
         ($([$attr:meta])*)
         ($($item_kind:tt)*)
         $name:ident = $val:expr; $($rest:tt)*
     ) => {
+        // Is there a way to avoid the double-evaluation of `$val` for item declarations
+        // without adding a dependency or proc-macro (i.e. use `paste`)?
         $(#[$attr])* $($item_kind)* $name: $crate::StrArray<{$val.len()}> = match $crate::StrArray::new($val) {
             Ok(a) => a,
             Err(e) => e.const_panic(),
