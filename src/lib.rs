@@ -51,6 +51,25 @@
 //! }
 //! assert_eq!(S4.len(), 7);
 //! ```
+//!
+//! # Rust feature detection
+//!
+//! This crate has a low Minimum Supported Rust Version (MSRV), and it achieves
+//! that through `cfg` values that are enabled in the `build.rs` based on the
+//! presence of existing features. This uses the `autocfg` library.
+//!
+//! The `build.rs` can be skipped for alternate build systems, but be sure to
+//! enable the appropriate `cfg` values based on your version of `rustc`.
+//! Those are:
+//!
+//! - `cfg(has_core_error)` is enabled when `core::error::Error` is present
+//!   (stable since Rust 1.81).
+//!   If it's enabled, then the error types in this crate implement `Error`
+//!   with any set of features. If it's disabled, they only implement the
+//!   `Error` trait when the `std` feature is enabled.
+//! - `cfg(has_const_mut)` is enabled when `&mut` is usable in `const`
+//!   (stable since Rust 1.83).
+//!   It adds `const` to various `fn` that use `&mut` in this crate.
 #![no_std]
 #![deny(missing_docs, unsafe_op_in_unsafe_fn)]
 #![deny(rustdoc::broken_intra_doc_links)]
