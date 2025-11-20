@@ -1,3 +1,4 @@
+use core::ops::DerefMut;
 use core::slice;
 use core::{
     ffi::CStr,
@@ -326,6 +327,61 @@ impl<const N: usize> CStrArray<N> {
         unsafe { CStr::from_bytes_with_nul_unchecked(self.as_bytes_with_nul()) }
     }
 
+    const_mut_fn! {
+        /// Borrows this `CStrArray` as a `&mut CStr`.
+        ///
+        /// This is called by `DerefMut` automatically.
+        ///
+        /// While `&mut CStr` is currently undersupported in the standard library,
+        /// it can be safely constructed a `Box<CStr>` and `unsafe` code can
+        /// utilize its invariants.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// # use core::{ffi::CStr, ptr};
+        /// # use str_array::cstr_array;
+        /// fn make_c_str_ascii_uppercase(x: &mut CStr) {
+        ///     let mut p: *mut u8 = ptr::from_mut(x).cast();
+        ///     loop {
+        ///         // SAFETY: the last byte of `CStr` is 0
+        ///         let b = unsafe { &mut *p };
+        ///         match *b {
+        ///             0 => return,
+        ///             b'a'..=b'z' => *b -= 32,
+        ///             _ => {}
+        ///         }
+        ///         // SAFETY: the end of the `CStr` has not been reached
+        ///         p = unsafe { p.add(1) };
+        ///     }
+        /// }
+        ///
+        /// let mut s = cstr_array!(c"hello");
+        /// make_c_str_ascii_uppercase(&mut s);
+        /// assert_eq!(s, c"HELLO");
+        /// ```
+        pub fn as_mut_c_str(&mut self) -> &mut CStr {
+            // This is carefully crafted to manually construct a `&mut CStr` for now and the future
+            // when a dedicated method like `from_mut_bytes_with_nul_unchecked` is added.
+            // It should handle `&mut CStr` as wide (slice-based) as it is today and its thin future.
+            // The length pointer metadata is preserved when `as`-casting between raw
+            // slice-DST pointers, and dropped when casting to a thin pointer.
+            // As of writing on nightly, it is valid to cast `*mut [u8]` to `*mut ExternType`,
+            // dropping the metadata as when casting to a pointer-to-`Sized`.
+            // This code bets that when `extern type` is stabilized and `CStr` is switched over
+            // to use it that this will remain true and valid.
+
+            let as_slice: *mut [u8] = core::ptr::slice_from_raw_parts_mut((self as *mut Self).cast(), N + 1);
+            // SAFETY:
+            // - The first `N` bytes of `self` (`data` field) are kept non-nul.
+            // - The last byte of `self` is always a nul byte.
+            // - The layout of `CStr` is `repr(transparent)` over `[c_char]`
+            //   including the nul, or an extern Type.
+            //   This slice length inherently must include the `nul` byte and no more.
+            unsafe { &mut *(as_slice as *mut CStr) }
+        }
+    }
+
     /// Converts this C string to a byte array reference.
     ///
     /// The returned slice will not contain the trailing nul terminator
@@ -478,9 +534,21 @@ impl<const N: usize> Deref for CStrArray<N> {
     }
 }
 
+impl<const N: usize> DerefMut for CStrArray<N> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.as_mut_c_str()
+    }
+}
+
 impl<const N: usize> AsRef<CStr> for CStrArray<N> {
     fn as_ref(&self) -> &CStr {
         self.as_c_str()
+    }
+}
+
+impl<const N: usize> AsMut<CStr> for CStrArray<N> {
+    fn as_mut(&mut self) -> &mut CStr {
+        self.as_mut_c_str()
     }
 }
 
@@ -498,6 +566,24 @@ impl<const N: usize> TryFrom<&[u8; N]> for CStrArray<N> {
     fn try_from(val: &[u8; N]) -> Result<Self, Self::Error> {
         // Reuse existing constructor which checks for interior nul bytes.
         CStrArray::from_bytes_without_nul(val)
+    }
+}
+
+impl<const N: usize> From<CStrArray<N>> for [u8; N] {
+    fn from(val: CStrArray<N>) -> Self {
+        val.into_bytes()
+    }
+}
+
+impl<const N: usize> From<CStrArray<N>> for [NonZeroU8; N] {
+    fn from(val: CStrArray<N>) -> Self {
+        val.data
+    }
+}
+
+impl<const N: usize> From<[NonZeroU8; N]> for CStrArray<N> {
+    fn from(data: [NonZeroU8; N]) -> Self {
+        Self { data, nul: Nul }
     }
 }
 
@@ -550,6 +636,18 @@ impl<'a, const N: usize> TryFrom<&'a mut CStr> for &'a mut CStrArray<N> {
 
     fn try_from(val: &'a mut CStr) -> Result<&'a mut CStrArray<N>, Self::Error> {
         CStrArray::mut_from_c_str(val)
+    }
+}
+
+impl<'a, const N: usize> From<&'a CStrArray<N>> for &'a CStr {
+    fn from(val: &'a CStrArray<N>) -> Self {
+        val.as_c_str()
+    }
+}
+
+impl<'a, const N: usize> From<&'a mut CStrArray<N>> for &'a mut CStr {
+    fn from(val: &'a mut CStrArray<N>) -> Self {
+        val.as_mut_c_str()
     }
 }
 
@@ -928,6 +1026,54 @@ mod tests {
         assert_eq!(STATIC, cstr!("hello"));
         assert_eq!(CONST.len(), 5);
         assert_eq!(CONST, cstr!("world"));
+    }
+
+    #[test]
+    fn test_from_into_bytes() {
+        let cstr_array = CStrArray::from_bytes_without_nul(b"hello").unwrap();
+        let bytes: [u8; 5] = cstr_array.into();
+        assert_eq!(bytes, *b"hello");
+    }
+
+    #[test]
+    fn test_from_into_nonzero_bytes() {
+        let cstr_array = CStrArray::from_bytes_without_nul(b"hello").unwrap();
+        let nonzero: [NonZeroU8; 5] = cstr_array.into();
+        assert_eq!(nonzero[0].get(), b'h');
+        assert_eq!(nonzero[4].get(), b'o');
+
+        let cstr_array2 = CStrArray::from(nonzero);
+        assert_eq!(cstr_array2, cstr!("hello"));
+    }
+
+    #[test]
+    fn test_from_ref_cstr_array() {
+        let cstr_array = CStrArray::from_bytes_without_nul(b"hello").unwrap();
+        let cstr_ref: &CStr = (&cstr_array).into();
+        assert_eq!(cstr_ref, cstr!("hello"));
+    }
+
+    #[test]
+    fn test_from_mut_ref_cstr_array() {
+        let mut cstr_array = CStrArray::from_bytes_without_nul(b"hello").unwrap();
+        let cstr_mut: &mut CStr = (&mut cstr_array).into();
+        // Modify through the mutable CStr reference
+        unsafe {
+            let ptr = cstr_mut.as_ptr() as *mut u8;
+            *ptr = b'H';
+        }
+        assert_eq!(cstr_array, cstr!("Hello"));
+    }
+
+    #[test]
+    fn test_as_mut_cstr() {
+        let mut cstr_array = CStrArray::from_bytes_without_nul(b"hello").unwrap();
+        let cstr_mut: &mut CStr = cstr_array.as_mut();
+        unsafe {
+            let ptr = cstr_mut.as_ptr() as *mut u8;
+            *ptr = b'J';
+        }
+        assert_eq!(cstr_array, cstr!("Jello"));
     }
 }
 
