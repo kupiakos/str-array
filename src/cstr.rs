@@ -69,14 +69,15 @@ const fn count_bytes(val: &CStr) -> usize {
 /// assert_eq!(&FOO, c"Hello, world!");
 /// assert_eq!(size_of_val(&FOO), 14);
 /// let foo_mut = unsafe { &mut *&raw mut FOO_MUT };
-/// foo_mut.as_mut_nonzero_bytes()[0] = b'C'.try_into().unwrap();
+/// foo_mut.data[0] = b'C'.try_into().unwrap();
 /// assert_eq!(foo_mut, c"C string buffer");
 /// assert_eq!(size_of_val(foo_mut), 16);
 /// ```
 #[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 #[repr(C)]
 pub struct CStrArray<const N: usize> {
-    data: [NonZeroU8; N],
+    /// The non-nul data in this C string.
+    pub data: [NonZeroU8; N],
     nul: NulByte,
 }
 
@@ -187,7 +188,7 @@ impl<const N: usize> CStrArray<N> {
         /// # use str_array::CStrArray;
         /// let mut boxed = CString::new("hello").unwrap().into_boxed_c_str();
         /// let s_mut = CStrArray::<5>::mut_from_c_str(&mut boxed).unwrap();
-        /// s_mut.as_mut_nonzero_bytes()[0] = b'H'.try_into().unwrap();
+        /// s_mut.data[0] = b'H'.try_into().unwrap();
         /// assert_eq!(&*boxed, c"Hello");
         ///
         /// let mut short = CString::new("foo").unwrap().into_boxed_c_str();
@@ -217,7 +218,7 @@ impl<const N: usize> CStrArray<N> {
         /// let m: &mut CStrArray<3> = unsafe {
         ///     CStrArray::mut_from_c_str_unchecked(&mut boxed)
         /// };
-        /// m.as_mut_nonzero_bytes()[0] = b'A'.try_into().unwrap();
+        /// m.data[0] = b'A'.try_into().unwrap();
         /// assert_eq!(&*boxed, c"Abc");
         /// ```
         ///
@@ -347,6 +348,8 @@ impl<const N: usize> CStrArray<N> {
 
     /// Converts this C string to a `&[NonZero<u8>]`.
     ///
+    /// This is also exposed in `self.data`.
+    ///
     /// # Examples
     ///
     /// ```
@@ -365,6 +368,8 @@ impl<const N: usize> CStrArray<N> {
         ///
         /// This allows for safe in-place mutation of the C string contents
         /// without changing its length.
+        ///
+        /// This is also exposed in `self.data`.
         ///
         /// # Examples
         ///
