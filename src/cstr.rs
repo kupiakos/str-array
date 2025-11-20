@@ -64,7 +64,7 @@ const fn count_bytes(val: &CStr) -> usize {
 /// # use core::mem::size_of_val;
 /// # use str_array::cstr_array;
 /// cstr_array! {
-///     static FOO = include_str!("foo.txt");
+///     static FOO = b"Hello, world!";
 ///     static mut FOO_MUT = c"c string buffer";
 /// }
 /// assert_eq!(&FOO, c"Hello, world!");

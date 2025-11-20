@@ -139,7 +139,7 @@ pub mod __internal {
 /// # use core::mem::size_of_val;
 /// # use str_array::str_array;
 /// str_array! {
-///     static FOO = include_str!("foo.txt");
+///     static FOO = "Hello, world!";
 ///     static mut FOO_MUT = "utf-8 buffer";
 /// }
 /// assert_eq!(&FOO, "Hello, world!");
