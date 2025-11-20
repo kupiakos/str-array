@@ -79,26 +79,11 @@ extern crate alloc;
 #[cfg(any(test, feature = "std"))]
 extern crate std;
 
-#[cfg(feature = "alloc")]
-use alloc::{
-    borrow::{Borrow, BorrowMut},
-    boxed::Box,
-    ffi::CString,
-    rc::Rc,
-    string::String,
-    sync::Arc,
-};
 use core::{
     fmt::{self, Debug, Display},
     ops::{Deref, DerefMut},
-    str::{FromStr, Utf8Error},
+    str::Utf8Error,
 };
-
-#[cfg(all(has_core_error, not(feature = "std")))]
-use core::error::Error;
-
-#[cfg(all(not(has_core_error), feature = "std"))]
-use std::error::Error;
 
 mod cmp;
 mod convert;
@@ -667,7 +652,8 @@ macro_rules! str_array {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::format;
+
+    use ::alloc::format;
 
     trait TypeEq {
         type This;

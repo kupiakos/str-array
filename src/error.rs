@@ -1,6 +1,12 @@
 //! Error types for array-backed strings.
 
-use super::*;
+use core::fmt::{self, Debug, Display};
+
+#[cfg(any(has_core_error, not(feature = "std")))]
+use core::error::Error;
+
+#[cfg(all(not(has_core_error), feature = "std"))]
+use std::error::Error;
 
 /// Failed to build `StrArray<N>` from a different-length `&str`.
 #[derive(Clone, Copy)]
@@ -92,7 +98,20 @@ impl Error for InteriorNulError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::format;
+
+    use ::alloc::format;
+
+    #[cfg(any(has_core_error, feature = "std"))]
+    #[test]
+    fn test_dyn_error_upcast() {
+        let s = StrLenError::<10> { src_len: 5 };
+        let cs = CStrLenError::<10> { src_len: 5 };
+        let i = InteriorNulError { position: 10 };
+
+        let _e1: &dyn ::std::error::Error = &s;
+        let _e2: &dyn ::std::error::Error = &cs;
+        let _e3: &dyn ::std::error::Error = &i;
+    }
 
     #[test]
     fn test_str_len_error_debug() {

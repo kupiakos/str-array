@@ -653,8 +653,9 @@ impl<'a, const N: usize> From<&'a mut CStrArray<N>> for &'a mut CStr {
 
 #[cfg(feature = "alloc")]
 mod alloc {
-    use super::*;
-    use crate::*;
+    use crate::{error::CStrLenError, CStrArray};
+    use ::alloc::{boxed::Box, ffi::CString, rc::Rc, sync::Arc};
+    use core::ffi::CStr;
 
     impl<const N: usize> TryFrom<Box<CStr>> for CStrArray<N> {
         type Error = CStrLenError<N>;
@@ -922,6 +923,7 @@ macro_rules! cstr {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use ::alloc::format;
 
     #[test]
@@ -1080,6 +1082,7 @@ mod tests {
 #[cfg(all(test, feature = "alloc"))]
 mod alloc_tests {
     use super::*;
+
     use ::alloc::{boxed::Box, ffi::CString, rc::Rc, sync::Arc};
 
     #[test]

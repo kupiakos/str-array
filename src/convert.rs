@@ -1,4 +1,5 @@
-use super::*;
+use crate::{error::StrLenError, StrArray};
+use core::str::{FromStr, Utf8Error};
 
 impl<const N: usize> FromStr for StrArray<N> {
     type Err = StrLenError<N>;
@@ -120,7 +121,9 @@ impl<const N: usize> AsMut<str> for StrArray<N> {
 
 #[cfg(feature = "alloc")]
 mod alloc {
-    use super::*;
+    use crate::{error::StrLenError, StrArray};
+    use ::alloc::{boxed::Box, rc::Rc, string::String, sync::Arc};
+    use core::borrow::{Borrow, BorrowMut};
 
     impl<const N: usize> Borrow<str> for StrArray<N> {
         fn borrow(&self) -> &str {
@@ -194,6 +197,8 @@ mod alloc {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::str_array;
+
     use core::borrow::{Borrow, BorrowMut};
 
     #[test]
@@ -327,6 +332,8 @@ mod tests {
 #[cfg(all(test, feature = "alloc"))]
 mod alloc_tests {
     use super::*;
+    use crate::str_array;
+
     use ::alloc::{boxed::Box, rc::Rc, string::String, sync::Arc};
 
     #[test]

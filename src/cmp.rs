@@ -1,4 +1,4 @@
-use super::*;
+use crate::StrArray;
 use core::cmp::Ordering;
 
 impl<const N: usize> PartialOrd<str> for StrArray<N> {
