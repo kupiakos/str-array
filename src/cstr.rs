@@ -231,7 +231,7 @@ impl<const N: usize> CStrArray<N> {
             // - The caller promises the string is `N` bytes long.
             // - `CStr` thus promises that `as_ptr` points to `N` non-zero bytes
             //   followed by a zero byte--the layout and bit validity of `Self`.
-            unsafe { &mut *(val.as_ptr().cast::<Self>() as *mut Self) }
+            unsafe { &mut *(val as *mut CStr as *mut Self) }
         }
     }
 
@@ -1061,7 +1061,7 @@ mod tests {
         let cstr_mut: &mut CStr = (&mut cstr_array).into();
         // Modify through the mutable CStr reference
         unsafe {
-            let ptr = cstr_mut.as_ptr() as *mut u8;
+            let ptr = cstr_mut as *mut CStr as *mut u8;
             *ptr = b'H';
         }
         assert_eq!(cstr_array, cstr!("Hello"));
@@ -1072,7 +1072,7 @@ mod tests {
         let mut cstr_array = CStrArray::from_bytes_without_nul(b"hello").unwrap();
         let cstr_mut: &mut CStr = cstr_array.as_mut();
         unsafe {
-            let ptr = cstr_mut.as_ptr() as *mut u8;
+            let ptr = cstr_mut as *mut CStr as *mut u8;
             *ptr = b'J';
         }
         assert_eq!(cstr_array, cstr!("Jello"));
