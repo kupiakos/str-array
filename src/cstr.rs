@@ -1,14 +1,15 @@
-use core::ops::DerefMut;
-use core::slice;
 use core::{
-    ffi::CStr,
+    ffi::{c_char, CStr},
     fmt::{self, Debug},
     num::NonZeroU8,
-    ops::Deref,
+    ops::{Deref, DerefMut},
+    slice,
 };
 
-use crate::const_mut_fn;
-use crate::error::{CStrLenError, InteriorNulError};
+use crate::{
+    const_mut_fn,
+    error::{CStrLenError, InteriorNulError},
+};
 use NulByte::Nul;
 
 /// A byte that must always be 0.
