@@ -334,8 +334,8 @@ impl<const N: usize> CStrArray<N> {
         /// This is called by `DerefMut` automatically.
         ///
         /// While `&mut CStr` is currently undersupported in the standard library,
-        /// it can be safely constructed a `Box<CStr>` and `unsafe` code can
-        /// utilize its invariants.
+        /// it can be safely constructed by borrowing a `Box<CStr>` and `unsafe` code
+        /// can utilize its invariants.
         ///
         /// # Examples
         ///
@@ -358,7 +358,7 @@ impl<const N: usize> CStrArray<N> {
         /// }
         ///
         /// let mut s = cstr_array!(c"hello");
-        /// make_c_str_ascii_uppercase(&mut s);
+        /// make_c_str_ascii_uppercase(s.as_mut_c_str());  // or just `&mut s`
         /// assert_eq!(s, c"HELLO");
         /// ```
         pub fn as_mut_c_str(&mut self) -> &mut CStr {
@@ -481,7 +481,7 @@ impl<const N: usize> CStrArray<N> {
         /// - The nul terminator cannot be relocated to earlier in the string.
         ///   In other words, the length of the C string cannot be changed.
         ///   This restriction can never be loosened, as the first `N` bytes
-        ///   of `self` is required to have non-zero contents.
+        ///   of `self` are required to have non-zero contents.
         ///
         /// # Examples
         ///
